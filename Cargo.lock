@@ -1854,6 +1854,7 @@ dependencies = [
  "ctrlc",
  "dirs 7.0.0",
  "env_logger",
+ "futures-lite",
  "git2 0.21.0",
  "hex",
  "hkdf",

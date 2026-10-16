@@ -53,6 +53,7 @@ libc.workspace = true
 nix.workspace = true
 notify-rust.workspace = true
 zbus.workspace = true
+futures-lite.workspace = true
 aes-gcm.workspace = true
 rand.workspace = true
 ctrlc.workspace = true
