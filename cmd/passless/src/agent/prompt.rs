@@ -1646,7 +1646,7 @@ mod dbus_tests {
             summary: &str,
             body: &str,
             actions: Vec<String>,
-            _hints: HashMap<String, zbus::zvariant::Value<'_>>,
+            _hints: HashMap<String, zbus::Variant<'_>>,
             expire_timeout: i32,
         ) -> zbus::fdo::Result<u32> {
             let mut state = self.state.lock().unwrap();
@@ -1826,11 +1826,8 @@ mod dbus_tests {
         let timeout_result = tokio::time::timeout(Duration::from_secs(TEST_TIMEOUT_SECS), async {
             let (service, state, notify_ready) = TestNotificationService::new(server_kind);
             let conn = Builder::session()
-                .unwrap()
                 .name("org.freedesktop.Notifications")
-                .unwrap()
                 .serve_at("/org/freedesktop/Notifications", service)
-                .unwrap()
                 .build()
                 .await
                 .unwrap();
