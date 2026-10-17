@@ -194,6 +194,7 @@ fn spawn_agent_runtime(
     agent_config: passless_core::agent::AgentConfig,
     security_config: passless_core::config::SecurityConfig,
     pin_config: passless_core::config::PinConfig,
+    uv_config: passless_core::config::UvConfig,
     shutdown: Arc<AtomicBool>,
 ) -> Option<std::thread::JoinHandle<()>> {
     let shutdown_for_runtime = shutdown.clone();
@@ -208,6 +209,7 @@ fn spawn_agent_runtime(
                 &agent_config,
                 security_config,
                 pin_config,
+                uv_config,
                 shutdown_for_runtime.clone(),
             ) {
                 Ok(runtime) => {
@@ -592,6 +594,7 @@ fn run() -> Result<()> {
                         config.agents.clone(),
                         security_config,
                         pin_config,
+                        uv_config,
                         shutdown.clone(),
                     );
 
@@ -642,6 +645,7 @@ fn run() -> Result<()> {
                         config.agents.clone(),
                         security_config,
                         pin_config,
+                        uv_config,
                         shutdown.clone(),
                     );
 
@@ -691,6 +695,7 @@ fn run() -> Result<()> {
                             config.agents.clone(),
                             security_config,
                             pin_config,
+                            uv_config,
                             shutdown.clone(),
                         );
 
@@ -727,6 +732,7 @@ fn run() -> Result<()> {
                             config.agents.clone(),
                             security_config,
                             pin_config,
+                            uv_config,
                             shutdown.clone(),
                         );
 
