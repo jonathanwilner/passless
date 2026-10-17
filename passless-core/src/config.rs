@@ -937,7 +937,7 @@ impl AppConfig {
     /// Validate the configuration
     pub fn validate(&self) -> crate::error::Result<()> {
         self.pin.validate()?;
-        self.uv.face.validate().map_err(|e| crate::error::Error::Config(e))?;
+        self.uv.face.validate().map_err(crate::error::Error::Config)?;
         #[cfg(feature = "agent")]
         {
             let human_path = self.backend().ok().map(|b| b.state_path());
