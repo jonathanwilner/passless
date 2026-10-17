@@ -5,6 +5,380 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.20.2](https://github.com/pando85/passless/tree/v0.20.2) - 2026-10-08
+
+### Fixed
+
+- pass: Preserve password-store GPG recipient semantics (#525) ([09a0ad2](https://github.com/pando85/passless/commit/09a0ad2853a9091e1003d037e9b9adcd6899bd9f))
+
+### Build
+
+- deps: Update Rust crate signal-hook to v0.4.5 (#518) ([1b171eb](https://github.com/pando85/passless/commit/1b171ebf9fe22f2f6dfecf79f482b6aa3d6f8e91))
+- deps: Update Rust crate zeroize to v1.9.1 (#520) ([86d000b](https://github.com/pando85/passless/commit/86d000b2bf6fbe70d907e4819ce8ebde4901ac02))
+- deps: Update Rust crate psl to v2.1.240 (#521) ([5ccd03f](https://github.com/pando85/passless/commit/5ccd03f2a49b11dcb86e527a34dac4b7f30a647e))
+- deps: Update Rust crate notify-rust to v4.18.2 (#523) ([be5970b](https://github.com/pando85/passless/commit/be5970b5191a688936d2546de4e6ccdaaf94bab6))
+- deps: Update Rust crate psl to v2.1.241 (#526) ([b1c52f4](https://github.com/pando85/passless/commit/b1c52f494e557ea2393feb096b417c1b15d62aad))
+- deps: Update Rust crate toml to v1.1.7 (#527) ([aa98cec](https://github.com/pando85/passless/commit/aa98cecdae8e4454ba8aa1f7113285024f1b167a))
+
+## [v0.20.1](https://github.com/pando85/passless/tree/v0.20.1) - 2026-10-03
+
+### Fixed
+
+- Advertise plat false for the USB HID authenticator (#514) ([4fdc09d](https://github.com/pando85/passless/commit/4fdc09d724877d0f39260413b803d7e5c4dc5a9c))
+
+### Build
+
+- deps: Update Rust crate psl to v2.1.237 (#507) ([05d0a74](https://github.com/pando85/passless/commit/05d0a74e4fc1031218c25ec43e6cec377e588a82))
+- deps: Update Rust crate thiserror to v2.0.21 (#508) ([2ac669d](https://github.com/pando85/passless/commit/2ac669de802068065178176478199a638d1e991c))
+- deps: Update Rust crate psl to v2.1.238 (#509) ([b887f2f](https://github.com/pando85/passless/commit/b887f2fba98f5e085a0dcbfdb606f40d93ea14ff))
+- deps: Update dependency @simplewebauthn/server to v14.0.3 (#510) ([f665b4e](https://github.com/pando85/passless/commit/f665b4e6763fd07c94deb0e9d31089f96a11c83c))
+- deps: Update Rust crate notify-rust to v4.18.1 (#511) ([6ca1347](https://github.com/pando85/passless/commit/6ca13471f9a0c374e97bf6893e61436bf11844b3))
+- deps: Update Rust crate libc to v0.2.190 (#512) ([4b0a927](https://github.com/pando85/passless/commit/4b0a9272e2225e4983c898f855f090c448057064))
+- deps: Update Rust crate psl to v2.1.239 (#515) ([0c21244](https://github.com/pando85/passless/commit/0c21244321ee5ad15a6ef1e91cf4503c00110713))
+- deps: Update Rust crate tokio to v1.53.2 (#516) ([d99a417](https://github.com/pando85/passless/commit/d99a4174f7879f0f7be40662c724f1d29c742f9d))
+
+## [v0.20.0](https://github.com/pando85/passless/tree/v0.20.0) - 2026-09-23
+
+### Added
+
+- Support explicit automatic interaction mode (#505) ([c6afa10](https://github.com/pando85/passless/commit/c6afa101eaf72ec11d93672528367d3f05f504ff))
+
+### Build
+
+- deps: Update Rust crate psl to v2.1.236 (#504) ([9d36564](https://github.com/pando85/passless/commit/9d36564629e6dc640f5ebcdb53a1492514080b71))
+- deps: Update dependency ubuntu to v26 (#496) ([ec9ab8f](https://github.com/pando85/passless/commit/ec9ab8f5a87ff26049d901267cb2dbc3c56c52c3))
+
+## [v0.19.4](https://github.com/pando85/passless/tree/v0.19.4) - 2026-09-22
+
+### Fixed
+
+- packaging: Keep AUR checks host-safe (#502) ([82cf839](https://github.com/pando85/passless/commit/82cf8397ed716f78e870d259f27e5ad03a832305))
+
+## [v0.19.3](https://github.com/pando85/passless/tree/v0.19.3) - 2026-09-21
+
+### Fixed
+
+- pass: Respect scoped .gpg-id during initialization (#499) ([addb647](https://github.com/pando85/passless/commit/addb647545a8a7aa558967a113a688d99a93019a))
+
+### Build
+
+- deps: Update Rust crate psl to v2.1.231 (#483) ([b823964](https://github.com/pando85/passless/commit/b82396452609094a8536b4aa8ca351df1537c832))
+- deps: Update Rust crate dirs to v7 (#478) ([db07ee1](https://github.com/pando85/passless/commit/db07ee1a47a1c2b35970ee6796dc0ba73a2a5d54))
+- deps: Update Rust crate prs-lib to v0.5.8 (#485) ([c9a483c](https://github.com/pando85/passless/commit/c9a483cc8343599e981bb06c357c4abc50183caa))
+- deps: Update Rust crate psl to v2.1.232 (#486) ([10c1281](https://github.com/pando85/passless/commit/10c1281918d10ab64ed2e9b90903952d2fbf15bc))
+- deps: Update Rust crate toml to v1.1.6 (#487) ([b1f36f6](https://github.com/pando85/passless/commit/b1f36f66d979709b21a80fd7f1755d7a4678d648))
+- deps: Update dependency @simplewebauthn/server to v14.0.2 (#488) ([88bb0d7](https://github.com/pando85/passless/commit/88bb0d70816417e4c2455d0d5786897a4ff305d0))
+- deps: Update Rust crate clap to v4.6.7 (#489) ([5624f27](https://github.com/pando85/passless/commit/5624f277361fc947b94b58c052274fe4c9e55a76))
+- deps: Update Rust crate clap_complete to v4.6.10 (#490) ([f833181](https://github.com/pando85/passless/commit/f833181d8b067891c3a33af4c8d1f170b9f9c7a8))
+- deps: Update Rust crate prs-lib to v0.5.9 (#492) ([a42e09e](https://github.com/pando85/passless/commit/a42e09eb7bf5707bc065a4f2cd1ff488c98105df))
+- deps: Update Rust crate clap_complete to v4.6.11 (#493) ([1678f33](https://github.com/pando85/passless/commit/1678f333e1aaf2b2d364fc1414d766aa019be0fc))
+- deps: Update Rust crate syn to v3.0.6 (#494) ([317dc5f](https://github.com/pando85/passless/commit/317dc5f9b3ee511a4908b0080fe9cbceb25a2887))
+- deps: Update Rust crate psl to v2.1.233 (#495) ([b4277ad](https://github.com/pando85/passless/commit/b4277adf93db56c83d1fab50c136cc8874200a42))
+- deps: Update Rust crate psl to v2.1.234 (#497) ([79aedbe](https://github.com/pando85/passless/commit/79aedbe8a7aad86586fa6cf21e9ea1fac21a870b))
+- deps: Update pre-commit hook alessandrojcm/commitlint-pre-commit-hook to v9.27.0 (#498) ([0b4000a](https://github.com/pando85/passless/commit/0b4000a6bfd6fd3c3b65c05eaf04ef70d18d24d9))
+- deps: Update Rust crate psl to v2.1.235 (#500) ([50a4455](https://github.com/pando85/passless/commit/50a445537fe948851406d11908a14c0b35b67f1b))
+
+## [v0.19.2](https://github.com/pando85/passless/tree/v0.19.2) - 2026-09-06
+
+### Fixed
+
+- Handle Option::None in ConfigDoc macro to produce valid TOML (#481) ([6e9af6e](https://github.com/pando85/passless/commit/6e9af6ef010bf7572a2cd7a7482300bf5d33116d))
+
+### Build
+
+- deps: Update Rust crate psl to v2.1.228 (#474) ([aa6726d](https://github.com/pando85/passless/commit/aa6726df900a0632d77c438cb08d4ff148a354e0))
+- deps: Update Rust crate syn to v3.0.5 (#475) ([8983870](https://github.com/pando85/passless/commit/89838701e9df03c876c42c8c7daf66a0c8e7162c))
+- deps: Update dependency @simplewebauthn/server to v14.0.1 (#476) ([2fdbf97](https://github.com/pando85/passless/commit/2fdbf979ac6844321388dab7a3336ddf8bb3736f))
+- deps: Update Rust crate psl to v2.1.229 (#477) ([c814aa7](https://github.com/pando85/passless/commit/c814aa7ae9d7e66d4b7a409abfc71f6122bd4b03))
+- deps: Update Rust crate psl to v2.1.230 (#479) ([f6f8996](https://github.com/pando85/passless/commit/f6f899679d6432ff58cc20662f36848f46d8c75f))
+
+## [v0.19.1](https://github.com/pando85/passless/tree/v0.19.1) - 2026-09-02
+
+### Fixed
+
+- Preserve existing install targets ([15de858](https://github.com/pando85/passless/commit/15de858c2de3fb46ca7222bb58e521353681209c))
+- Add ci to allowed commitlint types ([824f531](https://github.com/pando85/passless/commit/824f53186fd6ccea0423b2345eeb94a052050fb3))
+- Exclude fuzz targets from shebang executable check ([7046326](https://github.com/pando85/passless/commit/7046326f7fea3ed938fa502b74c0da304a123fa6))
+- Make pass Git SSH agent socket explicit (#469) ([767c4d2](https://github.com/pando85/passless/commit/767c4d21523f026f1ffc64910d85bc5c885c1bd7))
+
+### Documentation
+
+- agent: Document protocol fuzzing ([d74dd1a](https://github.com/pando85/passless/commit/d74dd1a7b74d533d76f1a1566271b13f459edc6c))
+- agent: Record daemon hardening baseline ([02d6a15](https://github.com/pando85/passless/commit/02d6a156607e6047600a2d7d83ea435efffd7928))
+- Surface experimental agent authentication ([44ab89e](https://github.com/pando85/passless/commit/44ab89ec3e8a242d341dec08690b9bf3a871ddfe))
+- Record credentialsd integration direction ([1bc81fe](https://github.com/pando85/passless/commit/1bc81fe2aea3b26fd42daa83fe7cb2ffead6e250))
+
+### Build
+
+- deps: Update Rust crate psl to v2.1.227 (#470) ([e58035b](https://github.com/pando85/passless/commit/e58035bed1ad77644349c81eba5743080f53c866))
+- deps: Update dependency @simplewebauthn/server to v14 ([e40729d](https://github.com/pando85/passless/commit/e40729dfb1facc1438a21fa3e5f6335e668d12dd))
+- deps: Update Rust crate toml to v1.1.5 (#472) ([db47067](https://github.com/pando85/passless/commit/db470675ef2f7509f8b9d93b0ba6d6a978eed1d3))
+
+### Testing
+
+- agent: Add protocol fuzz workspace ([f25eb05](https://github.com/pando85/passless/commit/f25eb0594caeb203ad78209efea94cf286338734))
+- agent: Fuzz protocol frame decoding ([6302720](https://github.com/pando85/passless/commit/63027200ff2cef27eef8510d2db9754b58465d41))
+- agent: Fuzz request validation ([b7e20c2](https://github.com/pando85/passless/commit/b7e20c2790896cda33f89c410e0455f884623f13))
+- agent: Seed protocol fuzz corpus ([0589d65](https://github.com/pando85/passless/commit/0589d652939ea52b0eac53f1f2a0d71bde1ab2ab))
+- agent: Seed principal protocol corpus ([4838952](https://github.com/pando85/passless/commit/48389527b1e3363ec6c017d78d9fd036861343b0))
+- agent: Seed request-validation corpus ([f724276](https://github.com/pando85/passless/commit/f7242762da49bee9762c51b452d00c9915423908))
+- agent: Seed registration-validation corpus ([35de1d5](https://github.com/pando85/passless/commit/35de1d5329a99fb1f827f8fae583717638e107f7))
+- agent: Add bounded fuzz smoke target ([26cab8a](https://github.com/pando85/passless/commit/26cab8a04176f87d3a1657041b1d4668c96606f4))
+
+### Chore
+
+- Ignore fuzz build artifacts ([17d00d0](https://github.com/pando85/passless/commit/17d00d09aec64f3b1e53f8c8b91bc30db21bbb19))
+
+### Ci
+
+- agent: Run bounded protocol fuzz smoke ([c8b82b0](https://github.com/pando85/passless/commit/c8b82b0f7c94434db3fd07941c53090815731212))
+- Install libudev-dev in agent-fuzz job ([2a5c2e5](https://github.com/pando85/passless/commit/2a5c2e5ac3d3915141903b4fa36ed4bebb204eb4))
+
+### Security
+
+- agent: Add safe root daemon hardening ([6cc5db3](https://github.com/pando85/passless/commit/6cc5db355ff3fb17ccd32b9d727f12875e4d5e1e))
+
+## [v0.19.0](https://github.com/pando85/passless/tree/v0.19.0) - 2026-08-28
+
+### Added
+
+- Allow profile-scoped shared browser with fixed CDP port and unlimited sessions ([b1bcad2](https://github.com/pando85/passless/commit/b1bcad2bf39735d47185bb0d0eb8bdfc33f91fbd))
+
+### Fixed
+
+- pass: Avoid repeated decryption and GPG key prompts (#454) ([a693a4d](https://github.com/pando85/passless/commit/a693a4d787ead3f4168a79b05abe01e3e5bc1d04))
+- WebAuthn sign hardening — TOCTOU, Unix socket server, replay dedup, same-user batch (#450) ([d371a21](https://github.com/pando85/passless/commit/d371a21399be5aae483c9c686c464cffb86d4e2b))
+- Increase default max_concurrent_sessions to maximum (#451) ([15564a0](https://github.com/pando85/passless/commit/15564a0c227e92b17ac17261c95f49abff2bd834))
+- Shared browser correctness and maintainability improvements ([0e6f542](https://github.com/pando85/passless/commit/0e6f542337afefa96b779cd0b7890372b2ca2e92))
+- Keep profile-scoped browser alive for playwright MCP ([385bc1a](https://github.com/pando85/passless/commit/385bc1a12a03c39dedd823f8c17f77fbad164289))
+- Launch playwright MCP browser lazily on first CDP connection ([9edaf0c](https://github.com/pando85/passless/commit/9edaf0cdf90b6752f73717018b0e81893913876e))
+
+### Build
+
+- deps: Update Rust crate aes to v0.9.3 (#455) ([770dac7](https://github.com/pando85/passless/commit/770dac7d80fd58a4b7e124e8ac57d3748ad2b53e))
+
+## [v0.18.1](https://github.com/pando85/passless/tree/v0.18.1) - 2026-08-26
+
+### Fixed
+
+- agent: Prevent PR_SET_PDEATHSIG from killing principals on thread exit (#447) ([5974081](https://github.com/pando85/passless/commit/597408113f5a736880598a8af817ecab14dfb4c2))
+- Avoid repeated pass sync for PIN state (#448) ([b6e9cbd](https://github.com/pando85/passless/commit/b6e9cbdbc13de9cc2685a0c2bd044bcc5bd41db8))
+
+### Build
+
+- deps: Update dependency @simplewebauthn/server to v13.3.3 (#445) ([6b830ae](https://github.com/pando85/passless/commit/6b830aea228c221eb39345de5ac261af95bc2f99))
+
+## [v0.18.0](https://github.com/pando85/passless/tree/v0.18.0) - 2026-08-25
+
+### Added
+
+- agent: Add lazy Playwright MCP browser bootstrap (#428) ([620a0b7](https://github.com/pando85/passless/commit/620a0b756da2c73fb56d6250242198f57de7ac04))
+- agent: Isolate browser leases per principal session (#435) ([c1e92e7](https://github.com/pando85/passless/commit/c1e92e735c8e6cab823991df89ad1041b3fbe59e))
+- Use systemd-journal-logger when running as systemd service (#437) ([0014c6a](https://github.com/pando85/passless/commit/0014c6ae56175a8d6bf7bb5047294bbe81846e49))
+
+### Fixed
+
+- agent: Handle SIGTERM and detect orphaned sessions (#438) ([005f8ab](https://github.com/pando85/passless/commit/005f8abbead20431a22f199cf898664867b7b2b6))
+- logging: Preserve filters with journald (#443) ([a651052](https://github.com/pando85/passless/commit/a6510522759caff1d9265100f3ae760e981125f5))
+- pass: Batch Git sync per operation (#434) ([e57a763](https://github.com/pando85/passless/commit/e57a7638b6326c05543867e05f7b67bcb18a2863))
+- Complete encrypted credential backup (#426) ([08b88ae](https://github.com/pando85/passless/commit/08b88aeecd811afa16ab8f2304f0117cc9e232d7))
+
+### Build
+
+- deps: Update Rust crate darling to v0.24.1 (#431) ([c11b040](https://github.com/pando85/passless/commit/c11b040c841da137dcb82342c9e86c5e5ea80e35))
+- deps: Update Rust crate psl to v2.1.225 (#430) ([eca06a7](https://github.com/pando85/passless/commit/eca06a715686f7392c79a175a0a9c6e7b82c5944))
+- deps: Update Rust crate psl to v2.1.226 (#436) ([dc56364](https://github.com/pando85/passless/commit/dc56364c4a82b99c493ae7cd3f38dffaf9bbe8a5))
+- deps: Update Rust crate aes-gcm to v0.11.1 (#439) ([b9188e5](https://github.com/pando85/passless/commit/b9188e5d4db6ce10c9859847905b6a2c39a12e46))
+- deps: Update Rust crate log to v0.4.34 (#440) ([3be059e](https://github.com/pando85/passless/commit/3be059e3a11c23c6d9d2ea07c6fb239638b0d737))
+- deps: Update Rust crate syn to v3.0.4 (#441) ([814da19](https://github.com/pando85/passless/commit/814da19732cbc6416e0fe508e5d9a4fe4d99ce27))
+- deps: Update Rust crate signal-hook to 0.4 (#442) ([5dbdd08](https://github.com/pando85/passless/commit/5dbdd0830fcf6ab0133e4b80341a8b7a1bbbd7ca))
+
+## [v0.17.0](https://github.com/pando85/passless/tree/v0.17.0) - 2026-08-16
+
+### Added
+
+- Improve Playwright MCP browser integration (#423) ([06eec5e](https://github.com/pando85/passless/commit/06eec5e4b834997b7f1a4c9b113d5379204c1545))
+
+### Testing
+
+- Make browser lease tests deterministic (#424) ([6cc76c0](https://github.com/pando85/passless/commit/6cc76c00f97358134dbe38e8dd52455446af61a8))
+
+## [v0.16.0](https://github.com/pando85/passless/tree/v0.16.0) - 2026-08-15
+
+### Added
+
+- agent: Expose effective authority (#409) ([0b00240](https://github.com/pando85/passless/commit/0b00240ea78078796f0acb5997081289a8a0191e))
+- agent: Make same-user enrollment ephemeral (#411) ([af94914](https://github.com/pando85/passless/commit/af9491440ab8f6a0806ec95013bf4c146b9e8b4d))
+- agent: Support per-RP credential selection (#415) ([f8f1ec2](https://github.com/pando85/passless/commit/f8f1ec299a2f56e1fc81863de37ea68f903c5957))
+- Implement unified same-user and isolated agent modes (#402) ([a6facff](https://github.com/pando85/passless/commit/a6facff70fdeb9b2d1c43cb83cc7eec59e6ca9e7))
+- Add same-user catch-all RP authentication (#407) ([7cf04e1](https://github.com/pando85/passless/commit/7cf04e1886c777e6e1aef85d54beb05497fb708d))
+
+### Fixed
+
+- agent: Harden security boundaries and usability (#408) ([ec3a750](https://github.com/pando85/passless/commit/ec3a7506f446806ce0f2e0268b5400c6b9417d25))
+- agent: Require dangerous profile acknowledgements (#410) ([86f3bb9](https://github.com/pando85/passless/commit/86f3bb91532abb42c086806d5c4162541f4ecc50))
+- agent: Restore same-user Chromium port launches (#418) ([001f17a](https://github.com/pando85/passless/commit/001f17a1d081ad42f8c1cd7815af8fd8a798869f))
+- Initialize agent runtime in the background (#406) ([3736c2c](https://github.com/pando85/passless/commit/3736c2c2bb83f26fb1a3e0d2a2feffddb35cd315))
+- Resolve PIN UV token E2E test failures (#416) ([cca6c38](https://github.com/pando85/passless/commit/cca6c38b89acef2ea14863bec946922400c45a0f))
+
+### Build
+
+- deps: Update Rust crate clap_complete to v4.6.9 (#403) ([c1508a5](https://github.com/pando85/passless/commit/c1508a5a20a208b487ff474adbc22b76237c6878))
+- deps: Update Rust crate clap to v4.6.6 (#404) ([584998e](https://github.com/pando85/passless/commit/584998e39f75192bfb7f6f119e9af3811e8bcd0a))
+- deps: Update actions/upload-artifact action to v7 (#405) ([92778a1](https://github.com/pando85/passless/commit/92778a19a79d79cd86333985ae1c911ef3c0ffc4))
+- deps: Update Rust crate thiserror to v2.0.20 (#413) ([9d08056](https://github.com/pando85/passless/commit/9d0805660c1bb262eb222086c794568d0b9293b9))
+- deps: Update Rust crate zbus to v5.19.0 (#414) ([9722c14](https://github.com/pando85/passless/commit/9722c14339c6266d079c34a9fd9ada63a02a7936))
+- deps: Update clechasseur/rs-clippy-check action to v6.0.7 (#419) ([4a96ec0](https://github.com/pando85/passless/commit/4a96ec03d3df98e1673823168de4d4a894eeb1cb))
+- deps: Update Rust crate psl to v2.1.224 (#420) ([7a75450](https://github.com/pando85/passless/commit/7a754501f46c1c820421fb36195f1d8473052f31))
+
+## [v0.15.1](https://github.com/pando85/passless/tree/v0.15.1) - 2026-08-05
+
+### Fixed
+
+- Advertise dynamic built-in UV state (#395) ([19f4a14](https://github.com/pando85/passless/commit/19f4a14e71ecef8186f27e6d4eab9be07faa7654))
+
+### Documentation
+
+- Add credential backup and backup-eligibility guide (#391) ([6db1c32](https://github.com/pando85/passless/commit/6db1c32e681cb5148f2be0693e89b09ff882c3a3))
+
+### Build
+
+- deps: Update Rust crate base64 to v0.23.1 (#392) ([e8dca3a](https://github.com/pando85/passless/commit/e8dca3a691bfb53502896e5434f98d063b8f17f5))
+- deps: Upgrade soft-fido2 to 0.17.0 (#397) ([9b0e218](https://github.com/pando85/passless/commit/9b0e218b2f86e782168b1375884dd695486d2b38))
+
+## [v0.15.0](https://github.com/pando85/passless/tree/v0.15.0) - 2026-08-01
+
+### Added
+
+- Add encrypted credential backup and restore (#383) ([6f707d6](https://github.com/pando85/passless/commit/6f707d6495bb7171dd1440a96288f708a9a086a1))
+
+### Build
+
+- deps: Update Rust crate clap to v4.6.5 (#381) ([e0d8e2d](https://github.com/pando85/passless/commit/e0d8e2d0b507a671fb5823b056497a6d7745b4dc))
+- deps: Update soft-fido2 to 0.16.1 (#387) ([51b6e41](https://github.com/pando85/passless/commit/51b6e419bedbb9f622b4125115a6508cbcac30d6))
+
+## [v0.14.0](https://github.com/pando85/passless/tree/v0.14.0) - 2026-07-31
+
+### Added
+
+- agent: Implement CDP port exposure mode (ADR 0004) (#361) ([09fc630](https://github.com/pando85/passless/commit/09fc630b37b16b0c87f1589fa341d2988bf52bf3))
+- tpm: Add portable TPM-resident credential key backend (#354) ([7147b31](https://github.com/pando85/passless/commit/7147b31a40ab33749067645e5d0f85c58d492a0c))
+- Add portable TPM credential key provider foundation (#352) ([34d99c3](https://github.com/pando85/passless/commit/34d99c3f1b175c6cf8ed0a8da1522f54eb81ecbc))
+
+### Fixed
+
+- notification: Make Dunst UP prompts actionable (#375) ([e27ed11](https://github.com/pando85/passless/commit/e27ed1115fa9df1c7f9a76f1a6ac50e30bcdaed9))
+- pass: Refresh credential index after external sync (#379) ([44161d0](https://github.com/pando85/passless/commit/44161d098b97802f02ebc82edf957a0439f932fc))
+- storage: Prevent RP ID path traversal and symlink escape (#334) ([0c41375](https://github.com/pando85/passless/commit/0c41375dd02d3be1f0da47040a951ea3b4d0d197))
+- Cfg-gate E2E_AUTO_ACCEPT_STORAGE_ENV to release build unused constant warning (#331) ([f9e540d](https://github.com/pando85/passless/commit/f9e540d0d0b689978d89fb51a08acd4ecd91f14a))
+- Update soft-fido2 to 0.14.0 to fix UV retry reset (#344) ([851d554](https://github.com/pando85/passless/commit/851d5546a9c1116ed503a46023889d43c7601618))
+- Enforce pass-compatible hierarchical .gpg-id recipient resolution (#351) ([73b30b7](https://github.com/pando85/passless/commit/73b30b72dc8d196a53f020a4fe4e5d68445862ba))
+- Allow uv-reset without PIN when no PIN is configured (#366) ([eebe2be](https://github.com/pando85/passless/commit/eebe2be3fdbfe081cc99b9af857eb730c9e2557a))
+
+### Documentation
+
+- TEE hardware compatibility analysis for post-2021 Intel Core processors (#313) ([99b1416](https://github.com/pando85/passless/commit/99b141696b901a240c0395ba941f6f88883266ad))
+- Clarify WebAuthn client compatibility and credentialsd integration (#353) ([65d1ca7](https://github.com/pando85/passless/commit/65d1ca75442194819b44b765be047828af031769))
+- Expand Android section and professionalize TEE compatibility doc (#364) ([58a3be9](https://github.com/pando85/passless/commit/58a3be9ffc8bbc206bd6837509d9880a877cab61))
+
+### Build
+
+- deps: Update KSXGitHub/github-actions-deploy-aur action to v4.2.0 (#311) ([68a49e0](https://github.com/pando85/passless/commit/68a49e0c79b27bee7c39228ac67446cef8cf3ac5))
+- deps: Update Rust crate toml to v1.1.3 (#315) ([de9a7dc](https://github.com/pando85/passless/commit/de9a7dcd76ae7e5084804f1172d1f1b86da54645))
+- deps: Update Rust crate syn to v2.0.119 (#316) ([3d43c9a](https://github.com/pando85/passless/commit/3d43c9a83f6d051a4c3da83a1033a0338a27d2f7))
+- deps: Update Rust crate clap to v4.6.2 (#317) ([3876373](https://github.com/pando85/passless/commit/3876373d82ecbbc636f2c9482969b5ad32d0eeb3))
+- deps: Update Rust crate thiserror to v2.0.19 (#321) ([0cc92ec](https://github.com/pando85/passless/commit/0cc92eceb88cef38b9159ea406b2db5aaa936f59))
+- deps: Update Rust crate serde to v1.0.229 (#320) ([7234093](https://github.com/pando85/passless/commit/7234093ba67f4e65db8429e7c366fb2e7b929138))
+- deps: Update Rust crate quote to v1.0.47 (#323) ([2d5d3e5](https://github.com/pando85/passless/commit/2d5d3e576a0a952feceba216fd158bea68b30efa))
+- deps: Update Rust crate proc-macro2 to v1.0.107 (#322) ([0dee97a](https://github.com/pando85/passless/commit/0dee97a322e18f903ac1ca0691fef5204a941fb8))
+- deps: Update Rust crate syn to v3 (#324) ([dce6259](https://github.com/pando85/passless/commit/dce6259479db664dd6591a10743507aa8352cedc))
+- deps: Update dependency @simplewebauthn/server to v13.3.2 (#326) ([de58525](https://github.com/pando85/passless/commit/de585254606bb893abe742bf96e5ec0403c68c28))
+- deps: Update Rust crate psl to v2.1.219 (#327) ([168a571](https://github.com/pando85/passless/commit/168a571957d801f026b8809d51208ac98cc023c0))
+- deps: Update Rust crate tokio to v1.53.0 (#329) ([6986eb9](https://github.com/pando85/passless/commit/6986eb9329f1071198eb899e95a95955c83f6a45))
+- deps: Update Rust crate zbus to v5.18.0 (#330) ([843617e](https://github.com/pando85/passless/commit/843617e06758ac40f619c4fd959cd679060a946a))
+- deps: Update actions/setup-node action to v7 (#332) ([574cbfb](https://github.com/pando85/passless/commit/574cbfb23b7674387cdf742788e4cbceda72d247))
+- deps: Update dependency node to v24 (#333) ([d8aea99](https://github.com/pando85/passless/commit/d8aea99092ea5bc312a0de203243f3b3d2b82651))
+- deps: Update Rust crate syn to v3.0.1 (#335) ([42868bf](https://github.com/pando85/passless/commit/42868bf4af7e4a7534d48eb63b81de09e24c56a9))
+- deps: Update Rust crate syn to v3.0.2 (#337) ([2aedb4a](https://github.com/pando85/passless/commit/2aedb4ae6714aa77baf4fd1dd3003772f32581ac))
+- deps: Update dependency ubuntu to v24 (#336) ([8f58443](https://github.com/pando85/passless/commit/8f5844371e4825ec0a2ac0f64d8fc2b1c00fb2f9))
+- deps: Update actions/setup-python action to v7 (#338) ([e259ae4](https://github.com/pando85/passless/commit/e259ae4da347345a15fe5b5b93745ae28d77d98d))
+- deps: Update Rust crate serde_json to v1.0.151 (#340) ([2848f17](https://github.com/pando85/passless/commit/2848f175c5a0700e299cb548b72befccc9fbcf0c))
+- deps: Update Rust crate clap to v4.6.3 (#339) ([fb237f4](https://github.com/pando85/passless/commit/fb237f4e2089ea033ee2b2bf99919265dd45d8df))
+- deps: Update Rust crate tokio to v1.53.1 (#342) ([c53d1d5](https://github.com/pando85/passless/commit/c53d1d5984cd539c3648d1b41e7c9e21300c5326))
+- deps: Update Rust crate libc to v0.2.187 (#341) ([0acf734](https://github.com/pando85/passless/commit/0acf734400918fc7bd74a89a0270f1005b3a88ca))
+- deps: Update Rust crate libc to v0.2.188 (#343) ([39248f5](https://github.com/pando85/passless/commit/39248f51259c0987edad72acb466f5d1b3179e31))
+- deps: Update Rust crate clap to v4.6.4 (#347) ([c9fc42d](https://github.com/pando85/passless/commit/c9fc42d89704d5c58c841debf6aeb49a5893bfb6))
+- deps: Update Rust crate libc to v0.2.189 (#348) ([ca6aa66](https://github.com/pando85/passless/commit/ca6aa66111ef75d4380173044b3ee71014de6c10))
+- deps: Update Rust crate psl to v2.1.220 (#349) ([090337f](https://github.com/pando85/passless/commit/090337f443fb5fe572c036da8489a6f6b9bb0e08))
+- deps: Update Rust crate syn to v3.0.3 (#350) ([c3c6653](https://github.com/pando85/passless/commit/c3c6653118120f314b7394feaebf2ecdb8e9e70a))
+- deps: Update Rust crate base64 to 0.23 (#358) ([0cf7744](https://github.com/pando85/passless/commit/0cf7744190eaaf6aa96225c39ec36603a35bc657))
+- deps: Update Rust crate aes to v0.9.1 (#359) ([d33c6ff](https://github.com/pando85/passless/commit/d33c6ff3e578d73f885e98a563098f679ff79630))
+- deps: Update Rust crate psl to v2.1.221 (#360) ([d07b71d](https://github.com/pando85/passless/commit/d07b71d5d1d2ddb0665f8a418230d034e1a27768))
+- deps: Update Rust crate psl to v2.1.222 (#362) ([e3bf7d9](https://github.com/pando85/passless/commit/e3bf7d99ac59d23547be31cc681351ca2a89eb89))
+- deps: Update clechasseur/rs-clippy-check action to v6.0.6 (#367) ([7d3ea69](https://github.com/pando85/passless/commit/7d3ea69e575a40d5a40e898fa9cf6a85376bb032))
+- deps: Update Rust crate aes to v0.9.2 (#368) ([1f73f22](https://github.com/pando85/passless/commit/1f73f225a6a97fa8c968867ab26963df2e615e6a))
+- deps: Update Rust crate psl to v2.1.223 (#371) ([b389b03](https://github.com/pando85/passless/commit/b389b0344fcb8eacd8bf0a49b7f1ca9aae5fcfd1))
+- deps: Update Rust crate clap_complete to v4.6.8 (#372) ([aae99ee](https://github.com/pando85/passless/commit/aae99ee1be0caf7707517aa29f0b1b8f50153c0f))
+- deps: Update Rust crate toml to v1.1.4 (#374) ([9c3c392](https://github.com/pando85/passless/commit/9c3c3929f3619d5507811cd2e7246cfa67a2e225))
+- deps: Update actions/stale action to v11 (#373) ([b83aa84](https://github.com/pando85/passless/commit/b83aa8445e8cdfee51dce482dfd33d79d036d221))
+- deps: Update Rust crate darling to 0.24 (#378) ([d6a5aaf](https://github.com/pando85/passless/commit/d6a5aaf2b5de8d55a9244db4f1b4982858c450fc))
+
+### Chore
+
+- Update Cargo.lock (#328) ([1432bec](https://github.com/pando85/passless/commit/1432bece7b9ec54bc0e3cd223740a58d9868b598))
+
+## [v0.13.0](https://github.com/pando85/passless/tree/v0.13.0) - 2026-07-12
+
+### Added
+
+- pin: Make UV retry limit configurable (#303) ([95319ae](https://github.com/pando85/passless/commit/95319aef6e7f696ef716bf80422ae2a86293368e))
+
+### Fixed
+
+- runtime: Prevent concurrent daemons from sharing backend state (#305) ([14c2d93](https://github.com/pando85/passless/commit/14c2d9392f715d38e98f20f5002d9b8159bf888d))
+- uv: Make UV retry exhaustion visible and preserve UV-blocked errors (#304) ([f72532b](https://github.com/pando85/passless/commit/f72532bab1b81498aa329092e5d7d68fed4736cb))
+
+### Documentation
+
+- Add runtime permissions and hardened setup guide (#299) ([c5b7b3a](https://github.com/pando85/passless/commit/c5b7b3a97ef87ef614f66f745d84317823202de5))
+
+### Chore
+
+- Improve release tooling for shallow clones (#296) ([ff430f0](https://github.com/pando85/passless/commit/ff430f04a3dba4e8c98e9c8bfd01e3c90dcbea08))
+
+## [v0.12.0](https://github.com/pando85/passless/tree/v0.12.0) - 2026-07-06
+
+### Added
+
+- Add authenticated uv retry reset (#295) ([6ea14bf](https://github.com/pando85/passless/commit/6ea14bf7c99bbf9f3c12fa5d17a424f7d0816f83))
+
+### Fixed
+
+- Add user directories to PATH in systemd service (#278) ([03ac850](https://github.com/pando85/passless/commit/03ac8504e74b26e18ff9cb033091b05ce6581f79))
+
+### Documentation
+
+- Add Android passkey compatibility section to README (#291) ([4e5cad4](https://github.com/pando85/passless/commit/4e5cad4061fc5f4270971399a6aa5486e30950e0))
+
+### Build
+
+- deps: Update Rust crate rpassword to v7.5.4 (#274) ([98bda86](https://github.com/pando85/passless/commit/98bda86169c27fc13d65da7ece9ce96c42f6761e))
+- deps: Update Rust crate log to v0.4.31 (#275) ([4ca1cfa](https://github.com/pando85/passless/commit/4ca1cfa2c2191156dddd7d8cc8c465f64e173ebb))
+- deps: Update Rust crate log to v0.4.32 (#276) ([a592636](https://github.com/pando85/passless/commit/a592636a55ad97e9e98a229ec58447e867ce944a))
+- deps: Update Rust crate zeroize to v1.9.0 (#279) ([fe2572a](https://github.com/pando85/passless/commit/fe2572a86c0377a78131925fdc2942db8a51cdec))
+- deps: Update Rust crate notify-rust to v4.18.0 (#281) ([f127707](https://github.com/pando85/passless/commit/f1277077013af060608c8bab60ad14212d2608ba))
+- deps: Update Rust crate syn to v2.0.118 (#280) ([349dc1f](https://github.com/pando85/passless/commit/349dc1f62a65da816510e53233854323e5d82048))
+- deps: Update actions/checkout action to v7 (#282) ([34958dc](https://github.com/pando85/passless/commit/34958dc474d6197d023955b4f416a69ba07e5434))
+- deps: Update Rust crate log to v0.4.33 (#283) ([8ad2861](https://github.com/pando85/passless/commit/8ad2861a0b6306f406abda7f45cb3b2e1ecbc1b0))
+- deps: Update Rust crate quote to v1.0.46 (#284) ([d97eb18](https://github.com/pando85/passless/commit/d97eb184a144cd6c6b10a3f3e444c4f5100bf22a))
+- deps: Update actions/cache action to v6 (#285) ([248d01f](https://github.com/pando85/passless/commit/248d01fcf48aa6e741b6ab2bd9133f2a1be45cc0))
+- deps: Update clechasseur/rs-clippy-check action to v6.0.5 (#286) ([1ac1b1b](https://github.com/pando85/passless/commit/1ac1b1b58bfa77484fdaecbae4637a3dcdb4f5f8))
+- deps: Update pre-commit hook alessandrojcm/commitlint-pre-commit-hook to v9.26.0 (#287) ([9bd8637](https://github.com/pando85/passless/commit/9bd86373459f8ddb3752909504b7305980568f90))
+- deps: Update Rust crate env_logger to v0.11.11 (#288) ([36a298a](https://github.com/pando85/passless/commit/36a298a8b787378dba4e193cb4d5722164b4122b))
+- deps: Update Rust crate aes-gcm to 0.11 (#289) ([e282356](https://github.com/pando85/passless/commit/e2823567f0f5e3107424aa89633c5a61981684af))
+- deps: Update Rust crate clap_complete to v4.6.6 (#292) ([10b1be2](https://github.com/pando85/passless/commit/10b1be2530f9f1c4328503d64fbdac5d2db74ebd))
+- deps: Update Rust crate clap_complete to v4.6.7 (#293) ([499c73f](https://github.com/pando85/passless/commit/499c73fa183fd687481e1ee55e0e3cb79610c90e))
+
 ## [v0.11.2](https://github.com/pando85/passless/tree/v0.11.2) - 2026-05-28
 
 ### Fixed

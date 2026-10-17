@@ -1,6 +1,16 @@
 //! FIDO2 Client Management Commands
 
+use crate::authenticator::{CMD_PASSLESS_RESET_UV_RETRIES, RESET_UV_RETRIES_SUBCOMMAND};
+use crate::credential_backup::{
+    BACKUP_COMMIT_SUBCOMMAND, BACKUP_PREPARE_SUBCOMMAND, CMD_PASSLESS_BACKUP, CMD_PASSLESS_RESTORE,
+    MAX_BACKUP_BUNDLE_SIZE, backup_commit_auth_data, backup_prepare_auth_data, restore_auth_data,
+};
+
 use std::collections::HashMap;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
+use std::path::{Path, PathBuf};
 
 use passless_core::{OutputFormat, Result};
 
@@ -319,13 +329,16 @@ fn authenticate_for_credential_management(
         }
         Err(uv_error) => {
             if output == OutputFormat::Plain {
-                println!("  UV not available: {:?}", uv_error);
+                if is_uv_blocked_error(&uv_error) {
+                    println!("  {}", format_uv_blocked_message(&uv_error));
+                } else {
+                    println!("  UV not available: {:?}", uv_error);
+                }
             }
 
             fallback_to_pin_auth(transport, output, uv_error)
         }
     }
-}
 }
 
 /// Try to authenticate for credential management, returning None on failure
@@ -346,6 +359,25 @@ fn authenticate_for_credential_management_opt(
         }
     }
 }
+
+/// Check if a soft_fido2 error represents a UV-blocked condition
+fn is_uv_blocked_error(error: &soft_fido2::Error) -> bool {
+    match error {
+        soft_fido2::Error::CtapError(code) => *code == soft_fido2::StatusCode::UvBlocked as u8,
+        _ => false,
+    }
+}
+
+/// Format a UV-blocked error with actionable remediation
+fn format_uv_blocked_message(error: &soft_fido2::Error) -> String {
+    format!(
+        "Built-in user verification (UV) is blocked: {:?}\n\
+         UV retries have been exhausted.\n\
+         Run `passless client pin uv-reset` to restore UV retries.",
+        error
+    )
+}
+
 
 /// Fallback to PIN authentication when UV fails
 fn fallback_to_pin_auth(
@@ -416,23 +448,39 @@ fn fallback_to_pin_auth(
                     ))
                 })
         }
-        Some(false) => Err(passless_core::Error::Other(format!(
-            "Credential management requires authentication but:\n\
-                 - UV is unavailable: {:?}\n\
-                 - No PIN is set on this authenticator\n\
-                 \n\
-                 Please set a PIN first using: passless client pin set <PIN>",
-            uv_error
-        ))),
-        None => Err(passless_core::Error::Other(format!(
-            "Credential management requires authentication but:\n\
-                 - UV is unavailable: {:?}\n\
-                 - This authenticator does not support PIN\n\
-                 \n\
-                 This authenticator may require built-in UV (biometric/fingerprint) \
-                 which is currently blocked or unavailable.",
-            uv_error
-        ))),
+        Some(false) => {
+            if is_uv_blocked_error(&uv_error) {
+                Err(passless_core::Error::Other(format_uv_blocked_message(
+                    &uv_error,
+                )))
+            } else {
+                Err(passless_core::Error::Other(format!(
+                    "Credential management requires authentication but:\n\
+                         - UV is unavailable: {:?}\n\
+                         - No PIN is set on this authenticator\n\
+                         \n\
+                         Please set a PIN first using: passless client pin set <PIN>",
+                    uv_error
+                )))
+            }
+        }
+        None => {
+            if is_uv_blocked_error(&uv_error) {
+                Err(passless_core::Error::Other(format_uv_blocked_message(
+                    &uv_error,
+                )))
+            } else {
+                Err(passless_core::Error::Other(format!(
+                    "Credential management requires authentication but:\n\
+                         - UV is unavailable: {:?}\n\
+                         - This authenticator does not support PIN\n\
+                         \n\
+                         This authenticator may require built-in UV (biometric/fingerprint) \
+                         which is currently blocked or unavailable.",
+                    uv_error
+                )))
+            }
+        }
     }
 }
 
@@ -1191,6 +1239,268 @@ let mut transport = open_authenticator(device)?;
     Ok(())
 }
 
+fn vendor_pin_uv_auth(
+    transport: &mut Transport,
+    output: OutputFormat,
+    auth_data: &[u8],
+) -> Result<(u8, Vec<u8>)> {
+    let token = authenticate_for_credential_management(transport, output)?;
+    let protocol = token.protocol_u8();
+    let pin_protocol = match protocol {
+        1 => PinProtocol::V1,
+        _ => PinProtocol::V2,
+    };
+    let encapsulation =
+        soft_fido2::PinUvAuthEncapsulation::new(transport, pin_protocol).map_err(|error| {
+            passless_core::Error::Other(format!(
+                "Failed to initialize PIN/UV authentication: {:?}",
+                error
+            ))
+        })?;
+    let param = encapsulation
+        .authenticate(auth_data, token.param())
+        .map_err(|error| {
+            passless_core::Error::Other(format!(
+                "Failed to authenticate credential backup request: {:?}",
+                error
+            ))
+        })?;
+    Ok((protocol, param))
+}
+
+fn vendor_response_payload<'a>(response: &'a [u8], operation: &str) -> Result<&'a [u8]> {
+    if response.is_empty() {
+        return Err(passless_core::Error::Other(format!(
+            "{} returned an empty response",
+            operation
+        )));
+    }
+    if response[0] == soft_fido2::StatusCode::Success as u8 {
+        return Ok(&response[1..]);
+    }
+    if response[0] & 0xe0 == 0xa0 {
+        return Ok(response);
+    }
+    Err(passless_core::Error::Other(format!(
+        "{} failed with CTAP status 0x{:02x}",
+        operation, response[0]
+    )))
+}
+
+fn atomic_write_backup(path: &Path, data: &[u8]) -> Result<()> {
+    if path.exists() {
+        return Err(passless_core::Error::Other(format!(
+            "Refusing to overwrite existing backup file: {}",
+            path.display()
+        )));
+    }
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    if !parent.is_dir() {
+        return Err(passless_core::Error::Other(format!(
+            "Backup destination directory does not exist: {}",
+            parent.display()
+        )));
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            passless_core::Error::Other("Invalid backup destination filename".to_string())
+        })?;
+    let temp_path = parent.join(format!(
+        ".{}.passless-tmp-{}-{}",
+        file_name,
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    let result = (|| -> std::io::Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temp_path)?;
+        file.write_all(data)?;
+        file.sync_all()?;
+        fs::rename(&temp_path, path)?;
+        File::open(parent)?.sync_all()?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    result.map_err(|error| {
+        passless_core::Error::Other(format!("Failed to write backup atomically: {}", error))
+    })
+}
+
+fn read_backup(path: &Path) -> Result<Vec<u8>> {
+    let file = File::open(path).map_err(|error| {
+        passless_core::Error::Other(format!(
+            "Failed to open backup file {}: {}",
+            path.display(),
+            error
+        ))
+    })?;
+    let mut bundle = Vec::new();
+    file.take((MAX_BACKUP_BUNDLE_SIZE + 1) as u64)
+        .read_to_end(&mut bundle)
+        .map_err(|error| {
+            passless_core::Error::Other(format!("Failed to read backup file: {}", error))
+        })?;
+    if bundle.is_empty() || bundle.len() > MAX_BACKUP_BUNDLE_SIZE {
+        return Err(passless_core::Error::Other(format!(
+            "Invalid backup size: {} bytes",
+            bundle.len()
+        )));
+    }
+    Ok(bundle)
+}
+
+pub fn credential_backup(
+    output: OutputFormat,
+    device: Option<&str>,
+    credential_id_hex: &str,
+    recipient: &str,
+    output_file: &PathBuf,
+    confirm: bool,
+) -> Result<()> {
+    if !confirm {
+        return Err(passless_core::Error::Other(
+            "Credential export requires --yes-i-understand-this-exports-a-passkey".to_string(),
+        ));
+    }
+    let credential_id = hex::decode(credential_id_hex).map_err(|error| {
+        passless_core::Error::Other(format!("Invalid credential ID hex: {:?}", error))
+    })?;
+    let mut transport = open_authenticator(device)?;
+
+    let prepare_auth_data = backup_prepare_auth_data(&credential_id, recipient);
+    let (protocol, auth_param) = vendor_pin_uv_auth(&mut transport, output, &prepare_auth_data)?;
+    let request = soft_fido2_ctap::cbor::MapBuilder::new()
+        .insert(1, BACKUP_PREPARE_SUBCOMMAND)
+        .and_then(|builder| builder.insert_bytes(2, &credential_id))
+        .and_then(|builder| builder.insert(3, recipient))
+        .and_then(|builder| builder.insert(4, protocol))
+        .and_then(|builder| builder.insert_bytes(5, &auth_param))
+        .and_then(|builder| builder.build())
+        .map_err(|_| passless_core::Error::Other("Failed to encode backup request".to_string()))?;
+    let response = transport
+        .send_ctap_command(CMD_PASSLESS_BACKUP, &request, 30_000)
+        .map_err(|error| {
+            passless_core::Error::Other(format!("Credential backup failed: {:?}", error))
+        })?;
+    let payload = vendor_response_payload(&response, "Credential backup prepare")?;
+    let parser = soft_fido2_ctap::cbor::MapParser::from_bytes(payload).map_err(|status| {
+        passless_core::Error::Other(format!("Invalid backup response: {:?}", status))
+    })?;
+    let bundle = parser.get_bytes(1).map_err(|status| {
+        passless_core::Error::Other(format!("Backup response omitted bundle: {:?}", status))
+    })?;
+    let token = parser.get_bytes(2).map_err(|status| {
+        passless_core::Error::Other(format!("Backup response omitted token: {:?}", status))
+    })?;
+    atomic_write_backup(output_file, &bundle)?;
+
+    let commit_auth_data = backup_commit_auth_data(&credential_id, &token);
+    let (protocol, auth_param) = vendor_pin_uv_auth(&mut transport, output, &commit_auth_data)?;
+    let commit_request = soft_fido2_ctap::cbor::MapBuilder::new()
+        .insert(1, BACKUP_COMMIT_SUBCOMMAND)
+        .and_then(|builder| builder.insert_bytes(2, &credential_id))
+        .and_then(|builder| builder.insert_bytes(3, &token))
+        .and_then(|builder| builder.insert(4, protocol))
+        .and_then(|builder| builder.insert_bytes(5, &auth_param))
+        .and_then(|builder| builder.build())
+        .map_err(|_| passless_core::Error::Other("Failed to encode backup commit".to_string()))?;
+    let commit_response = transport
+        .send_ctap_command(CMD_PASSLESS_BACKUP, &commit_request, 30_000)
+        .map_err(|error| {
+            passless_core::Error::Other(format!(
+                "Backup was written to {}, but authenticator finalization failed: {:?}",
+                output_file.display(),
+                error
+            ))
+        })?;
+    vendor_response_payload(&commit_response, "Credential backup commit")?;
+    transport.close();
+
+    match output {
+        OutputFormat::Plain => println!(
+            "Credential backed up successfully to {}. Backup state is now BE=1, BS=1.",
+            output_file.display()
+        ),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::json!({
+                "success": true,
+                "credential_id": credential_id_hex,
+                "path": output_file,
+                "backup_eligible": true,
+                "backed_up": true
+            })
+        ),
+    }
+    Ok(())
+}
+
+pub fn credential_restore(
+    output: OutputFormat,
+    device: Option<&str>,
+    input_file: &Path,
+    replace: bool,
+    confirm: bool,
+) -> Result<()> {
+    if !confirm {
+        return Err(passless_core::Error::Other(
+            "Credential restore requires --yes-i-understand-this-restores-a-passkey".to_string(),
+        ));
+    }
+    let bundle = read_backup(input_file)?;
+    let mut transport = open_authenticator(device)?;
+    let auth_data = restore_auth_data(&bundle, replace);
+    let (protocol, auth_param) = vendor_pin_uv_auth(&mut transport, output, &auth_data)?;
+    let request = soft_fido2_ctap::cbor::MapBuilder::new()
+        .insert_bytes(1, &bundle)
+        .and_then(|builder| builder.insert(2, replace))
+        .and_then(|builder| builder.insert(3, protocol))
+        .and_then(|builder| builder.insert_bytes(4, &auth_param))
+        .and_then(|builder| builder.build())
+        .map_err(|_| passless_core::Error::Other("Failed to encode restore request".to_string()))?;
+    let response = transport
+        .send_ctap_command(CMD_PASSLESS_RESTORE, &request, 30_000)
+        .map_err(|error| {
+            passless_core::Error::Other(format!("Credential restore failed: {:?}", error))
+        })?;
+    let payload = vendor_response_payload(&response, "Credential restore")?;
+    let parser = soft_fido2_ctap::cbor::MapParser::from_bytes(payload).map_err(|status| {
+        passless_core::Error::Other(format!("Invalid restore response: {:?}", status))
+    })?;
+    let credential_id = parser.get_bytes(1).map_err(|status| {
+        passless_core::Error::Other(format!(
+            "Restore response omitted credential ID: {:?}",
+            status
+        ))
+    })?;
+    transport.close();
+
+    match output {
+        OutputFormat::Plain => println!(
+            "Credential {} restored successfully with BE=1, BS=1.",
+            hex::encode(&credential_id)
+        ),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::json!({
+                "success": true,
+                "credential_id": hex::encode(&credential_id),
+                "replaced": replace,
+                "backup_eligible": true,
+                "backed_up": true
+            })
+        ),
+    }
+    Ok(())
+}
+
 /// Set PIN on authenticator
 pub fn pin_set(output: OutputFormat, device: Option<&str>, pin: &str) -> Result<()> {
     // Validate PIN length (CTAP2 spec: 4-63 UTF-8 bytes)
@@ -1348,6 +1658,183 @@ pub fn pin_change(
             let result = PinChangeResult {
                 success: true,
                 message: "PIN changed successfully".to_string(),
+            };
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        }
+    }
+
+    transport.close();
+    Ok(())
+}
+
+/// Reset built-in user verification retries on authenticator
+pub fn pin_uv_reset(output: OutputFormat, device: Option<&str>) -> Result<()> {
+    let mut transport = open_authenticator(device)?;
+
+    // Get authenticator info to determine PIN status
+    let info_response = Client::authenticator_get_info(&mut transport).map_err(|e| {
+        passless_core::Error::Other(format!("Failed to get authenticator info: {:?}", e))
+    })?;
+
+    let info_value: soft_fido2_ctap::cbor::Value = soft_fido2_ctap::cbor::decode(&info_response)
+        .map_err(|e| {
+            passless_core::Error::Other(format!("Failed to decode info response: {:?}", e))
+        })?;
+
+    let info = parse_authenticator_info(&info_value)?;
+
+    let client_pin_set = info
+        .options
+        .as_ref()
+        .and_then(|opts| opts.get("clientPin").copied())
+        .unwrap_or(false);
+
+    let payload_bytes = if client_pin_set {
+        // PIN-authenticated flow
+        if output == OutputFormat::Plain {
+            println!("Resetting built-in user verification retries...");
+            println!("Enter PIN: ");
+        }
+
+        let pin = read_password()
+            .map_err(|e| passless_core::Error::Other(format!("Failed to read PIN: {:?}", e)))?;
+
+        if pin.is_empty() {
+            return Err(passless_core::Error::Other(
+                "PIN is required for authenticated UV retry reset".to_string(),
+            ));
+        }
+
+        if output == OutputFormat::Plain {
+            println!();
+        }
+
+        // Determine the preferred pinUvAuthProtocol
+        let pin_uv_auth_protocol = info
+            .pin_uv_auth_protocols
+            .as_ref()
+            .and_then(|protocols| protocols.last())
+            .copied()
+            .unwrap_or(1);
+
+        // Get a PIN token for credential management
+        let mut encapsulation = soft_fido2::PinUvAuthEncapsulation::new(
+            &mut transport,
+            match pin_uv_auth_protocol {
+                1 => soft_fido2::PinProtocol::V1,
+                2 => soft_fido2::PinProtocol::V2,
+                _ => soft_fido2::PinProtocol::V2,
+            },
+        )
+        .map_err(|e| {
+            passless_core::Error::Other(format!("Failed to initialize PIN protocol: {:?}", e))
+        })?;
+
+        let permissions = soft_fido2::request::Permission::CredentialManagement as u8;
+        let pin_token_bytes = encapsulation
+            .get_pin_uv_auth_token_using_pin_with_permissions(
+                &mut transport,
+                &pin,
+                permissions,
+                None,
+            )
+            .map_err(|e| {
+                passless_core::Error::Other(format!("Failed to get PIN token: {:?}", e))
+            })?;
+
+        let auth_data = [CMD_PASSLESS_RESET_UV_RETRIES, RESET_UV_RETRIES_SUBCOMMAND];
+
+        let pin_uv_auth_param = encapsulation
+            .authenticate(&auth_data, &pin_token_bytes)
+            .map_err(|e| {
+                passless_core::Error::Other(format!("Failed to compute PIN UV auth param: {:?}", e))
+            })?;
+
+        if output == OutputFormat::Plain {
+            println!("Sending authenticated UV retry reset command...");
+        }
+
+        // Build authenticated payload
+        soft_fido2_ctap::cbor::MapBuilder::new()
+            .insert(1, RESET_UV_RETRIES_SUBCOMMAND)
+            .map_err(|_| passless_core::Error::Other("Failed to build CBOR payload".to_string()))?
+            .insert(3, pin_uv_auth_protocol)
+            .map_err(|_| passless_core::Error::Other("Failed to build CBOR payload".to_string()))?
+            .insert_bytes(4, &pin_uv_auth_param)
+            .map_err(|_| passless_core::Error::Other("Failed to build CBOR payload".to_string()))?
+            .build()
+            .map_err(|_| passless_core::Error::Other("Failed to build CBOR payload".to_string()))?
+    } else {
+        // No PIN configured - send unauthenticated reset command
+        if output == OutputFormat::Plain {
+            println!("No PIN configured; resetting UV retries directly...");
+        }
+
+        soft_fido2_ctap::cbor::MapBuilder::new()
+            .insert(1, RESET_UV_RETRIES_SUBCOMMAND)
+            .map_err(|_| passless_core::Error::Other("Failed to build CBOR payload".to_string()))?
+            .build()
+            .map_err(|_| passless_core::Error::Other("Failed to build CBOR payload".to_string()))?
+    };
+
+    // Send command 0x42 with the CBOR payload
+    let response = transport
+        .send_ctap_command(CMD_PASSLESS_RESET_UV_RETRIES, &payload_bytes, 30000)
+        .map_err(|e| passless_core::Error::Other(format!("UV retry reset failed: {:?}", e)))?;
+
+    let success = response == [0xa0] || response.first() == Some(&0x00);
+    if !success {
+        return Err(passless_core::Error::Other(format!(
+            "UV retry reset failed with status: 0x{:02x}",
+            response.first().copied().unwrap_or(0xff)
+        )));
+    }
+
+    // Parse the UV retries count from the response if available
+    let uv_retries_count = if response.len() > 1 {
+        if let Ok(soft_fido2_ctap::cbor::Value::Map(map)) =
+            soft_fido2_ctap::cbor::decode::<soft_fido2_ctap::cbor::Value>(&response[1..])
+        {
+            map.iter()
+                .find(|(k, _)| *k == soft_fido2_ctap::cbor::Value::Integer(1))
+                .and_then(|(_, v)| {
+                    if let soft_fido2_ctap::cbor::Value::Integer(n) = v {
+                        Some(*n as u8)
+                    } else {
+                        None
+                    }
+                })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    match output {
+        OutputFormat::Plain => {
+            if let Some(count) = uv_retries_count {
+                println!(
+                    "UV retries reset successfully! Restored to {} attempts.",
+                    count
+                );
+            } else {
+                println!("UV retries reset successfully!");
+                println!("Note: The retry counter has been restored to the configured maximum.");
+            }
+        }
+        OutputFormat::Json => {
+            #[derive(Serialize)]
+            struct PinUvResetResult {
+                success: bool,
+                message: String,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                uv_retries: Option<u8>,
+            }
+            let result = PinUvResetResult {
+                success: true,
+                message: "UV retries reset successfully".to_string(),
+                uv_retries: uv_retries_count,
             };
             println!("{}", serde_json::to_string_pretty(&result).unwrap());
         }

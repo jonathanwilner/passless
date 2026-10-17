@@ -1,16 +1,24 @@
+#[cfg(feature = "agent")]
+pub mod agent;
 mod authenticator;
 mod commands;
+mod credential_backup;
+mod instance_lock;
+mod logging;
 mod notification;
 mod pin_storage;
 mod storage;
 mod util;
 mod uv;
+mod worker;
 
 use passless_core::{
     AppConfig, Args, BackendConfig, ClientAction, Commands, ConfigAction, Error, PinAction, Result,
 };
 
-use soft_fido2_transport::{Cmd, CommandHandler, CtapHidHandler, Packet, UhidDevice};
+use soft_fido2::CredentialKeyProvider;
+use soft_fido2::SoftwareCredentialKeyProvider;
+use soft_fido2_transport::{Cmd, CommandHandler, CtapHidHandler, UhidDevice};
 
 use std::process;
 use std::sync::Arc;
@@ -20,7 +28,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use authenticator::AuthenticatorService;
 use clap::Parser;
 use commands::custom::register_yubikey_credential_mgmt;
-use env_logger::{Builder, Env};
 use log::{debug, error, info, warn};
 #[cfg(feature = "tpm")]
 use pin_storage::TpmPinStorage;
@@ -29,8 +36,24 @@ use shadow_rs::shadow;
 #[cfg(feature = "tpm")]
 use storage::TpmStorageAdapter;
 use storage::{CredentialStorage, LocalStorageAdapter, PassStorageAdapter};
+use worker::{UhidEndpoint, WorkerConfig, WorkerOutcome};
 
 shadow!(build);
+
+#[cfg(debug_assertions)]
+const E2E_AUTO_ACCEPT_STORAGE_ENV: &str = "PASSLESS_E2E_AUTO_ACCEPT_STORAGE";
+
+fn allow_e2e_storage_creation() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var(E2E_AUTO_ACCEPT_STORAGE_ENV).as_deref() == Ok("1")
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
+}
 
 /// CLI arguments with custom version string
 #[derive(Parser)]
@@ -46,20 +69,43 @@ struct CliArgs {
 }
 
 /// Wrapper for AuthenticatorService that implements CommandHandler
-struct ServiceHandler<S: CredentialStorage, P: PinStorage> {
-    service: std::sync::Mutex<AuthenticatorService<S, P>>,
+///
+/// Lock order (documented): operation_lock → service (storage).
+/// The operation_lock is held across the entire CTAP service dispatch so that
+/// human and delegated read-sign-update operations serialize. Never hold the
+/// service/storage lock while acquiring the operation_lock.
+pub(crate) struct ServiceHandler<
+    S: CredentialStorage,
+    P: PinStorage,
+    K: CredentialKeyProvider = SoftwareCredentialKeyProvider,
+> {
+    service: std::sync::Mutex<AuthenticatorService<S, P, K>>,
+    operation_lock: Arc<Mutex<()>>,
 }
 
-impl<S: CredentialStorage, P: PinStorage> ServiceHandler<S, P> {
-    fn new(service: AuthenticatorService<S, P>) -> Self {
+impl<S: CredentialStorage, P: PinStorage, K: CredentialKeyProvider + Send + Sync>
+    ServiceHandler<S, P, K>
+{
+    pub(crate) fn new(service: AuthenticatorService<S, P, K>) -> Self {
         Self {
             service: std::sync::Mutex::new(service),
+            operation_lock: Arc::new(Mutex::new(())),
+        }
+    }
+
+    fn with_operation_lock(service: AuthenticatorService<S, P, K>, lock: Arc<Mutex<()>>) -> Self {
+        Self {
+            service: std::sync::Mutex::new(service),
+            operation_lock: lock,
         }
     }
 }
 
-impl<S: CredentialStorage + 'static, P: PinStorage + 'static> CommandHandler
-    for ServiceHandler<S, P>
+impl<
+    S: CredentialStorage + 'static,
+    P: PinStorage + 'static,
+    K: CredentialKeyProvider + Send + Sync + 'static,
+> CommandHandler for ServiceHandler<S, P, K>
 {
     fn handle_command(&mut self, cmd: Cmd, data: &[u8]) -> soft_fido2_transport::Result<Vec<u8>> {
         if cmd != Cmd::Cbor {
@@ -67,13 +113,41 @@ impl<S: CredentialStorage + 'static, P: PinStorage + 'static> CommandHandler
             return Err(soft_fido2_transport::Error::InvalidCommand);
         }
 
+        let _op = self.operation_lock.lock().map_err(|e| {
+            error!("Failed to lock operation: {}", e);
+            soft_fido2_transport::Error::Other("Failed to lock operation".to_string())
+        })?;
+
         let mut service = self.service.lock().map_err(|e| {
             error!("Failed to lock service: {}", e);
             soft_fido2_transport::Error::Other("Failed to lock service".to_string())
         })?;
 
+        {
+            let mut storage = service.storage.lock().map_err(|e| {
+                error!("Failed to lock storage while beginning operation: {}", e);
+                soft_fido2_transport::Error::Other("Failed to begin storage operation".to_string())
+            })?;
+            storage.begin_operation().map_err(|e| {
+                error!("Failed to begin storage operation: {:?}", e);
+                soft_fido2_transport::Error::Other("Failed to begin storage operation".to_string())
+            })?;
+        }
+
         let mut response = Vec::new();
-        service.handle(data, &mut response).map_err(|e| {
+        let command_result = service.handle(data, &mut response);
+
+        {
+            let mut storage = service.storage.lock().map_err(|e| {
+                error!("Failed to lock storage while ending operation: {}", e);
+                soft_fido2_transport::Error::Other("Failed to end storage operation".to_string())
+            })?;
+            if let Err(e) = storage.end_operation() {
+                warn!("Failed to end storage operation: {:?}", e);
+            }
+        }
+
+        command_result.map_err(|e| {
             error!("CTAP command failed: {:?}", e);
             soft_fido2_transport::Error::Other("Command failed".to_string())
         })?;
@@ -84,10 +158,104 @@ impl<S: CredentialStorage + 'static, P: PinStorage + 'static> CommandHandler
 }
 
 /// Helper function to run the main loop with any storage backend
-fn run_with_service<S: CredentialStorage + 'static, P: PinStorage + 'static>(
-    mut service: AuthenticatorService<S, P>,
+fn run_with_service<
+    S: CredentialStorage + 'static,
+    P: PinStorage + 'static,
+    K: CredentialKeyProvider + Send + Sync + 'static,
+>(
+    service: AuthenticatorService<S, P, K>,
     uhid: UhidDevice,
     shutdown: Arc<AtomicBool>,
+) -> Result<()> {
+    run_with_service_inner(service, uhid, shutdown, None)
+}
+
+#[cfg(feature = "agent")]
+fn run_with_service_and_lock<
+    S: CredentialStorage + 'static,
+    P: PinStorage + 'static,
+    K: CredentialKeyProvider + Send + Sync + 'static,
+>(
+    service: AuthenticatorService<S, P, K>,
+    uhid: UhidDevice,
+    shutdown: Arc<AtomicBool>,
+    operation_lock: Arc<Mutex<()>>,
+) -> Result<()> {
+    run_with_service_inner(service, uhid, shutdown, Some(operation_lock))
+}
+
+#[cfg(feature = "agent")]
+#[allow(clippy::too_many_arguments)]
+fn spawn_agent_runtime(
+    human_storage: Arc<Mutex<Box<dyn CredentialStorage>>>,
+    human_pin_storage: Arc<Mutex<Box<dyn PinStorage>>>,
+    human_operation_lock: Arc<Mutex<()>>,
+    human_key_provider: Arc<dyn CredentialKeyProvider + Send + Sync>,
+    agent_config: passless_core::agent::AgentConfig,
+    security_config: passless_core::config::SecurityConfig,
+    pin_config: passless_core::config::PinConfig,
+    shutdown: Arc<AtomicBool>,
+) -> Option<std::thread::JoinHandle<()>> {
+    let shutdown_for_runtime = shutdown.clone();
+    match std::thread::Builder::new()
+        .name("agent-runtime-bootstrap".to_string())
+        .spawn(move || {
+            match agent::runtime::AgentRuntime::start(
+                human_storage,
+                human_pin_storage,
+                human_operation_lock,
+                human_key_provider,
+                &agent_config,
+                security_config,
+                pin_config,
+                shutdown_for_runtime.clone(),
+            ) {
+                Ok(runtime) => {
+                    while !shutdown_for_runtime.load(Ordering::Relaxed) {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                    runtime.shutdown();
+                }
+                Err(e) => {
+                    warn!(
+                        "Agent subsystem failed to start: {}; human path remains available",
+                        e
+                    );
+                }
+            }
+        }) {
+        Ok(handle) => {
+            debug!("Agent runtime initialization started in background");
+            Some(handle)
+        }
+        Err(e) => {
+            warn!(
+                "Failed to start agent initialization thread: {}; human path remains available",
+                e
+            );
+            None
+        }
+    }
+}
+
+#[cfg(feature = "agent")]
+fn join_agent_runtime(handle: Option<std::thread::JoinHandle<()>>) {
+    if let Some(handle) = handle
+        && handle.join().is_err()
+    {
+        warn!("Agent runtime thread panicked during shutdown");
+    }
+}
+
+fn run_with_service_inner<
+    S: CredentialStorage + 'static,
+    P: PinStorage + 'static,
+    K: CredentialKeyProvider + Send + Sync + 'static,
+>(
+    mut service: AuthenticatorService<S, P, K>,
+    uhid: UhidDevice,
+    shutdown: Arc<AtomicBool>,
+    operation_lock: Option<Arc<Mutex<()>>>,
 ) -> Result<()> {
     info!("{}", service.storage_info());
 
@@ -98,64 +266,49 @@ fn run_with_service<S: CredentialStorage + 'static, P: PinStorage + 'static>(
 
     let service_ref = service.storage.clone();
 
-    let handler = ServiceHandler::new(service);
-    let mut ctaphid_handler = CtapHidHandler::new(handler);
-    let mut buffer = [0u8; 64];
+    let handler = match operation_lock {
+        Some(lock) => ServiceHandler::with_operation_lock(service, lock),
+        None => ServiceHandler::new(service),
+    };
+    let ctaphid = CtapHidHandler::new(handler);
+    let endpoint = UhidEndpoint::new(uhid);
 
-    let mut last_cache_cleanup = std::time::Instant::now();
-    const CACHE_CLEANUP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+    let config = WorkerConfig::default();
 
-    loop {
-        if shutdown.load(Ordering::Relaxed) {
-            info!("Shutdown signal received, cleaning up...");
-            break;
-        }
-
-        if last_cache_cleanup.elapsed() >= CACHE_CLEANUP_INTERVAL {
+    let handle = worker::spawn(
+        endpoint,
+        ctaphid,
+        config,
+        shutdown.clone(),
+        Box::new(move || {
             if let Ok(mut storage) = service_ref.lock() {
                 storage.cleanup_expired_cache();
             }
-            last_cache_cleanup = std::time::Instant::now();
-        }
+        }),
+    );
 
-        match uhid.read_packet(&mut buffer) {
-            Ok(Some(_)) => {
-                debug!("Received packet from host");
-                let packet = Packet::from_bytes(buffer);
-
-                let response_packets = ctaphid_handler.process_packet(packet).map_err(|e| {
-                    error!("CTAP HID processing failed: {:?}", e);
-                    Error::Other("CTAP HID processing failed".to_string())
-                })?;
-
-                debug!("Sending {} response packets", response_packets.len());
-                for response_packet in response_packets {
-                    uhid.write_packet(response_packet.as_bytes()).map_err(|e| {
-                        error!("Failed to write packet: {:?}", e);
-                        Error::Other("Failed to write packet".to_string())
-                    })?;
-                }
-                debug!("Response sent successfully");
-            }
-            }
-            Ok(None) => {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                continue;
-            }
-            Err(e) => {
-                error!("Error reading packet: {:?}", e);
-                break;
-            }
-        }
+    while !shutdown.load(Ordering::Relaxed) {
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 
-    info!("Performing final cache cleanup...");
-    if let Ok(mut storage) = service_ref.lock() {
-        storage.cleanup_expired_cache();
-    }
-    info!("Authenticator stopped gracefully");
+    info!("Shutdown signal received, cleaning up...");
+    handle.cancel();
 
-    Ok(())
+    let outcome = handle.join();
+    match outcome {
+        WorkerOutcome::Clean => {
+            info!("Authenticator stopped gracefully");
+            Ok(())
+        }
+        WorkerOutcome::Error(e) => {
+            error!("Worker exited with error: {}", e);
+            Err(Error::Other(format!("Worker error: {}", e)))
+        }
+        WorkerOutcome::Panicked => {
+            error!("Worker thread panicked");
+            Err(Error::Other("Worker thread panicked".to_string()))
+        }
+    }
 }
 
 const UHID_ERROR_MESSAGE: &str = "Make sure you have the uhid kernel module loaded and proper permissions.\n\
@@ -222,6 +375,30 @@ fn run() -> Result<()> {
                     user_name.as_deref(),
                     display_name.as_deref(),
                 ),
+                ClientAction::Backup {
+                    credential_id,
+                    recipient,
+                    output_file,
+                    confirm,
+                } => commands::client::credential_backup(
+                    *output,
+                    device.as_deref(),
+                    credential_id,
+                    recipient,
+                    output_file,
+                    *confirm,
+                ),
+                ClientAction::Restore {
+                    input_file,
+                    replace,
+                    confirm,
+                } => commands::client::credential_restore(
+                    *output,
+                    device.as_deref(),
+                    input_file,
+                    *replace,
+                    *confirm,
+                ),
                 ClientAction::Pin { action } => match action {
                     PinAction::Set { pin } => {
                         commands::client::pin_set(*output, device.as_deref(), pin)
@@ -229,8 +406,23 @@ fn run() -> Result<()> {
                     PinAction::Change { old_pin, new_pin } => {
                         commands::client::pin_change(*output, device.as_deref(), old_pin, new_pin)
                     }
+                    PinAction::UvReset => {
+                        commands::client::pin_uv_reset(*output, device.as_deref())
+                    }
                 },
             },
+            #[cfg(feature = "agent")]
+            Commands::AgentAdmin { output, action } => {
+                commands::agent_admin::dispatch_admin(*output, action)
+            }
+            #[cfg(feature = "agent")]
+            Commands::Agent {
+                profile,
+                output,
+                action,
+            } => commands::agent::dispatch(profile.as_deref(), *output, action),
+            #[cfg(feature = "tpm")]
+            Commands::Tpm { action } => commands::tpm::dispatch(action),
         };
     }
 
@@ -240,18 +432,18 @@ fn run() -> Result<()> {
     } else {
         log::LevelFilter::Info
     };
-
-    let env = Env::default()
-        .filter("PASSLESS_LOG_LEVEL")
-        .write_style("PASSLESS_LOG_STYLE");
-    Builder::from_env(env)
-        .filter_level(log::LevelFilter::Debug)
-        .format_timestamp_millis()
-        .init();
-    log::set_max_level(log_level);
+    logging::init(log_level);
 
     // Load config: CLI args + config file + defaults (CLI takes precedence)
-    let config = AppConfig::load(&mut args);
+    let config = AppConfig::load(&mut args).inspect_err(|e| {
+        error!("{}", e.format_cli());
+    })?;
+
+    // Validate configuration
+    if let Err(e) = config.validate() {
+        error!("{}", e.format_cli());
+        return Err(e);
+    }
 
     // Validate configuration
     if let Err(e) = config.validate() {
@@ -270,111 +462,437 @@ fn run() -> Result<()> {
         warn!("Failed to apply security hardening: {}", e);
     }
 
-    info!("Creating UHID device...");
+    let backend = config.backend().map_err(|e| {
+        error!("Failed to load backend config: {}", e);
+        e
+    })?;
 
-    #[cfg(debug_assertions)]
-    let (vendor_id, product_id) = {
-        let vendor_id = std::env::var("PASSLESS_TEST_VENDOR_ID").ok().and_then(|s| {
-            let s = s.strip_prefix("0x").unwrap_or(&s);
-            u16::from_str_radix(s, 16).ok()
-        });
-        let product_id = std::env::var("PASSLESS_TEST_PRODUCT_ID")
-            .ok()
-            .and_then(|s| {
+    // Validate backend configuration for security
+    backend.validate().map_err(|e| {
+        error!("Backend configuration validation failed: {}", e);
+        e
+    })?;
+
+    let pass_git_sync = config.pass.git_sync;
+
+    #[cfg(feature = "agent")]
+    let agent_enabled = config.agents.enabled;
+    #[cfg(not(feature = "agent"))]
+    let agent_enabled = false;
+
+    if agent_enabled {
+        #[cfg(feature = "agent")]
+        {
+            use instance_lock::DaemonLocks;
+
+            let runtime_dir = dirs::runtime_dir()
+                .or_else(|| {
+                    let uid = unsafe { libc::getuid() };
+                    Some(std::path::PathBuf::from(format!("/tmp/passless-{}", uid)))
+                })
+                .ok_or_else(|| Error::Other("Failed to resolve runtime directory".to_string()))?;
+
+            let agent_backends: Vec<BackendConfig> = config
+                .agents
+                .profiles
+                .values()
+                .filter_map(|profile| profile.storage.as_ref().map(|s| s.to_backend_config()))
+                .collect();
+
+            info!(
+                "Acquiring daemon locks (human + {} agent backends)...",
+                agent_backends.len()
+            );
+            let _daemon_locks = DaemonLocks::acquire(&backend, &agent_backends, &runtime_dir)?;
+            debug!("Daemon locks acquired");
+
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let mut endpoint_manager = agent::endpoint_manager::EndpointManager::new(
+                config.agents.profiles.len().max(1),
+                shutdown.clone(),
+                worker::WorkerConfig::default(),
+            );
+            debug!("Endpoint manager initialized");
+
+            info!("Creating UHID device...");
+
+            #[cfg(debug_assertions)]
+            let (vendor_id, product_id) = {
+                let vendor_id = std::env::var("PASSLESS_TEST_VENDOR_ID").ok().and_then(|s| {
+                    let s = s.strip_prefix("0x").unwrap_or(&s);
+                    u16::from_str_radix(s, 16).ok()
+                });
+                let product_id = std::env::var("PASSLESS_TEST_PRODUCT_ID")
+                    .ok()
+                    .and_then(|s| {
+                        let s = s.strip_prefix("0x").unwrap_or(&s);
+                        u16::from_str_radix(s, 16).ok()
+                    });
+                (vendor_id, product_id)
+            };
+
+            #[cfg(not(debug_assertions))]
+            let (vendor_id, product_id) = (Some(0x15d9), Some(0x0a37));
+
+            let uhid = UhidDevice::create_fido_device_with_ids(None, vendor_id, product_id, None)
+                .map_err(|e| Error::Uhid(format!("{:?}", e)))
+                .inspect_err(|_e| {
+                    error!("Failed to create UHID device");
+                    error!("\n{}", UHID_ERROR_MESSAGE);
+                })?;
+
+            let shutdown_clone = shutdown.clone();
+            let ctrlc_pressed = Arc::new(AtomicBool::new(false));
+
+            ctrlc::set_handler(move || {
+                if ctrlc_pressed.load(Ordering::Relaxed) {
+                    error!("Second interrupt signal received, forcing immediate exit");
+                    process::exit(1);
+                }
+                info!("Received interrupt signal (Ctrl+C)");
+                info!("Initiating graceful shutdown... (press Ctrl+C again to force exit)");
+                shutdown_clone.store(true, Ordering::Relaxed);
+                ctrlc_pressed.store(true, Ordering::Relaxed);
+            })
+            .map_err(|e| Error::Other(format!("Failed to set Ctrl-C handler: {}", e)))?;
+
+            info!("Creating authenticator service...");
+
+            let security_config = config.security_config();
+            let pin_config = config.pin_config();
+            let uv_config = config.uv_config();
+            let operation_lock = Arc::new(Mutex::new(()));
+            let allow_storage_creation = allow_e2e_storage_creation();
+
+            match backend {
+                BackendConfig::Local { path } => {
+                    let storage = LocalStorageAdapter::new_with_options(
+                        path.clone().into(),
+                        allow_storage_creation,
+                    )?;
+                    let boxed: Box<dyn CredentialStorage> = Box::new(storage);
+                    let shared_storage = Arc::new(Mutex::new(boxed));
+                    let pin_storage_inner = LocalPinStorage::new(path.into());
+                    let boxed_pin: Box<dyn crate::pin_storage::PinStorage> =
+                        Box::new(pin_storage_inner);
+                    let pin_storage = Arc::new(Mutex::new(boxed_pin));
+                    let service = AuthenticatorService::with_shared_storage(
+                        shared_storage.clone(),
+                        Some(pin_storage.clone()),
+                        security_config.clone(),
+                        pin_config.clone(),
+                        uv_config.clone(),
+                    )?;
+
+                    let agent_runtime = spawn_agent_runtime(
+                        shared_storage.clone(),
+                        pin_storage.clone(),
+                        operation_lock.clone(),
+                        Arc::new(SoftwareCredentialKeyProvider),
+                        config.agents.clone(),
+                        security_config,
+                        pin_config,
+                        shutdown.clone(),
+                    );
+
+                    let result = run_with_service_and_lock(service, uhid, shutdown, operation_lock);
+                    join_agent_runtime(agent_runtime);
+                    endpoint_manager.cancel_all();
+                    let _ = endpoint_manager.shutdown_all(None);
+                    result
+                }
+                BackendConfig::Pass {
+                    store_path,
+                    path,
+                    gpg_backend,
+                } => {
+                    let gpg_backend = gpg_backend.parse::<storage::pass::GpgBackend>()?;
+                    let storage = PassStorageAdapter::new_with_options_and_git_sync(
+                        store_path.clone().into(),
+                        path.clone().into(),
+                        gpg_backend,
+                        allow_storage_creation,
+                        pass_git_sync,
+                    )?;
+                    let pass_sync = storage.sync_handle();
+                    let boxed: Box<dyn CredentialStorage> = Box::new(storage);
+                    let shared_storage = Arc::new(Mutex::new(boxed));
+                    let pin_storage_inner = PassPinStorage::new_with_sync(
+                        store_path.into(),
+                        path.into(),
+                        gpg_backend,
+                        pass_sync,
+                    );
+                    let boxed_pin: Box<dyn crate::pin_storage::PinStorage> =
+                        Box::new(pin_storage_inner);
+                    let pin_storage = Arc::new(Mutex::new(boxed_pin));
+                    let service = AuthenticatorService::with_shared_storage(
+                        shared_storage.clone(),
+                        Some(pin_storage.clone()),
+                        security_config.clone(),
+                        pin_config.clone(),
+                        uv_config.clone(),
+                    )?;
+
+                    let agent_runtime = spawn_agent_runtime(
+                        shared_storage.clone(),
+                        pin_storage.clone(),
+                        operation_lock.clone(),
+                        Arc::new(SoftwareCredentialKeyProvider),
+                        config.agents.clone(),
+                        security_config,
+                        pin_config,
+                        shutdown.clone(),
+                    );
+
+                    let result = run_with_service_and_lock(service, uhid, shutdown, operation_lock);
+                    join_agent_runtime(agent_runtime);
+                    endpoint_manager.cancel_all();
+                    let _ = endpoint_manager.shutdown_all(None);
+                    result
+                }
+                #[cfg(feature = "tpm")]
+                BackendConfig::Tpm {
+                    path,
+                    tcti,
+                    portable,
+                } => {
+                    if portable {
+                        use storage::tpm::portable::build_portable_bundle;
+
+                        let (provider, storage, pin_storage) = build_portable_bundle(
+                            path.clone().into(),
+                            Some(tcti.clone()),
+                            allow_storage_creation,
+                        )?;
+                        let boxed: Box<dyn CredentialStorage> = Box::new(storage);
+                        let shared_storage = Arc::new(Mutex::new(boxed));
+                        let pin_storage: Arc<Mutex<Box<dyn crate::pin_storage::PinStorage>>> =
+                            Arc::new(Mutex::new(Box::new(pin_storage)));
+                        let agent_key_provider: Arc<dyn CredentialKeyProvider + Send + Sync> =
+                            Arc::new(storage::tpm::portable::TpmCredentialKeyProvider::new(
+                                path.clone().into(),
+                                Some(tcti.clone()),
+                            )?);
+                        let service = AuthenticatorService::with_shared_storage_and_key_provider(
+                            shared_storage.clone(),
+                            Some(pin_storage.clone()),
+                            provider,
+                            security_config.clone(),
+                            pin_config.clone(),
+                            uv_config.clone(),
+                        )?;
+
+                        let agent_runtime = spawn_agent_runtime(
+                            shared_storage.clone(),
+                            pin_storage.clone(),
+                            operation_lock.clone(),
+                            agent_key_provider,
+                            config.agents.clone(),
+                            security_config,
+                            pin_config,
+                            shutdown.clone(),
+                        );
+
+                        let result =
+                            run_with_service_and_lock(service, uhid, shutdown, operation_lock);
+                        join_agent_runtime(agent_runtime);
+                        endpoint_manager.cancel_all();
+                        let _ = endpoint_manager.shutdown_all(None);
+                        result
+                    } else {
+                        let storage = TpmStorageAdapter::new_with_options(
+                            path.clone().into(),
+                            Some(tcti.clone()),
+                            allow_storage_creation,
+                        )?;
+                        let boxed: Box<dyn CredentialStorage> = Box::new(storage);
+                        let shared_storage = Arc::new(Mutex::new(boxed));
+                        let pin_storage = TpmPinStorage::new(path.into(), Some(tcti));
+                        let pin_storage: Arc<Mutex<Box<dyn crate::pin_storage::PinStorage>>> =
+                            Arc::new(Mutex::new(Box::new(pin_storage)));
+                        let service = AuthenticatorService::with_shared_storage(
+                            shared_storage.clone(),
+                            Some(pin_storage.clone()),
+                            security_config.clone(),
+                            pin_config.clone(),
+                            uv_config.clone(),
+                        )?;
+
+                        let agent_runtime = spawn_agent_runtime(
+                            shared_storage.clone(),
+                            pin_storage.clone(),
+                            operation_lock.clone(),
+                            Arc::new(SoftwareCredentialKeyProvider),
+                            config.agents.clone(),
+                            security_config,
+                            pin_config,
+                            shutdown.clone(),
+                        );
+
+                        let result =
+                            run_with_service_and_lock(service, uhid, shutdown, operation_lock);
+                        join_agent_runtime(agent_runtime);
+                        endpoint_manager.cancel_all();
+                        let _ = endpoint_manager.shutdown_all(None);
+                        result
+                    }
+                }
+            }
+        }
+        #[cfg(not(feature = "agent"))]
+        {
+            unreachable!()
+        }
+    } else {
+        info!("Acquiring instance lock...");
+        let _instance_lock = instance_lock::InstanceLock::acquire(&backend)?;
+        debug!(
+            "Instance lock acquired at {}",
+            _instance_lock.lock_path().display()
+        );
+
+        info!("Creating UHID device...");
+
+        #[cfg(debug_assertions)]
+        let (vendor_id, product_id) = {
+            let vendor_id = std::env::var("PASSLESS_TEST_VENDOR_ID").ok().and_then(|s| {
                 let s = s.strip_prefix("0x").unwrap_or(&s);
                 u16::from_str_radix(s, 16).ok()
             });
-        (vendor_id, product_id)
-    };
+            let product_id = std::env::var("PASSLESS_TEST_PRODUCT_ID")
+                .ok()
+                .and_then(|s| {
+                    let s = s.strip_prefix("0x").unwrap_or(&s);
+                    u16::from_str_radix(s, 16).ok()
+                });
+            (vendor_id, product_id)
+        };
 
-    #[cfg(not(debug_assertions))]
-    let (vendor_id, product_id) = (Some(0x15d9), Some(0x0a37));
+        #[cfg(not(debug_assertions))]
+        let (vendor_id, product_id) = (Some(0x15d9), Some(0x0a37));
 
-    let uhid = UhidDevice::create_fido_device_with_ids(None, vendor_id, product_id, None)
-        .map_err(|e| Error::Uhid(format!("{:?}", e)))
-        .inspect_err(|_e| {
-            error!("Failed to create UHID device");
-            error!("\n{}", UHID_ERROR_MESSAGE);
-        })?;
+        let uhid = UhidDevice::create_fido_device_with_ids(None, vendor_id, product_id, None)
+            .map_err(|e| Error::Uhid(format!("{:?}", e)))
+            .inspect_err(|_e| {
+                error!("Failed to create UHID device");
+                error!("\n{}", UHID_ERROR_MESSAGE);
+            })?;
 
-    // Set up graceful shutdown handler
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let shutdown_clone = shutdown.clone();
-    let ctrlc_pressed = Arc::new(AtomicBool::new(false));
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown_clone = shutdown.clone();
+        let ctrlc_pressed = Arc::new(AtomicBool::new(false));
 
-    ctrlc::set_handler(move || {
-        if ctrlc_pressed.load(Ordering::Relaxed) {
-            error!("Second interrupt signal received, forcing immediate exit");
-            process::exit(1);
-        }
-        info!("Received interrupt signal (Ctrl+C)");
-        info!("Initiating graceful shutdown... (press Ctrl+C again to force exit)");
-        shutdown_clone.store(true, Ordering::Relaxed);
-        ctrlc_pressed.store(true, Ordering::Relaxed);
-    })
-    .map_err(|e| Error::Other(format!("Failed to set Ctrl-C handler: {}", e)))?;
+        ctrlc::set_handler(move || {
+            if ctrlc_pressed.load(Ordering::Relaxed) {
+                error!("Second interrupt signal received, forcing immediate exit");
+                process::exit(1);
+            }
+            info!("Received interrupt signal (Ctrl+C)");
+            info!("Initiating graceful shutdown... (press Ctrl+C again to force exit)");
+            shutdown_clone.store(true, Ordering::Relaxed);
+            ctrlc_pressed.store(true, Ordering::Relaxed);
+        })
+        .map_err(|e| Error::Other(format!("Failed to set Ctrl-C handler: {}", e)))?;
 
-    info!("Creating authenticator service...");
+        info!("Creating authenticator service...");
 
-    // Get security config
-    let security_config = config.security_config();
+        let security_config = config.security_config();
+        let pin_config = config.pin_config();
+        let allow_storage_creation = allow_e2e_storage_creation();
 
-    // Get PIN config
-    let pin_config = config.pin_config();
-    let uv_config = config.uv_config();
+        // Get UV config for biometric verification
+        let uv_config = config.uv_config();
 
-    match config.backend().map_err(|e| {
-        error!("Failed to load backend config: {}", e);
-        e
-    })? {
-        BackendConfig::Local { path } => {
-            let storage = LocalStorageAdapter::new(path.clone().into())?;
-            let pin_storage = LocalPinStorage::new(path.into());
-            let pin_storage = Arc::new(Mutex::new(pin_storage));
-            let service = AuthenticatorService::with_pin_storage(
-                storage,
-                Some(pin_storage),
-                security_config,
-                pin_config,
-                uv_config,
-            )?;
-            run_with_service(service, uhid, shutdown)
-        }
-        BackendConfig::Pass {
-            store_path,
-            path,
-            gpg_backend,
-        } => {
-            let gpg_backend = storage::pass::GpgBackend::from_str(&gpg_backend)?;
-            let storage = PassStorageAdapter::new(
-                store_path.clone().into(),
-                path.clone().into(),
+        match backend {
+            BackendConfig::Local { path } => {
+                let storage = LocalStorageAdapter::new_with_options(
+                    path.clone().into(),
+                    allow_storage_creation,
+                )?;
+                let pin_storage = LocalPinStorage::new(path.into());
+                let pin_storage = Arc::new(Mutex::new(pin_storage));
+                let service = AuthenticatorService::with_pin_storage(
+                    storage,
+                    Some(pin_storage),
+                    security_config,
+                    pin_config,
+                    uv_config,
+                )?;
+                run_with_service(service, uhid, shutdown)
+            }
+            BackendConfig::Pass {
+                store_path,
+                path,
                 gpg_backend,
-            )?;
-            let pin_storage = PassPinStorage::new(store_path.into(), path.into(), gpg_backend);
-            let pin_storage = Arc::new(Mutex::new(pin_storage));
-            let service = AuthenticatorService::with_pin_storage(
-                storage,
-                Some(pin_storage),
-                security_config,
-                pin_config,
-                uv_config,
-            )?;
-            run_with_service(service, uhid, shutdown)
-        }
-        #[cfg(feature = "tpm")]
-        BackendConfig::Tpm { path, tcti } => {
-            let storage = TpmStorageAdapter::new(path.clone().into(), Some(tcti.clone()))?;
-            let pin_storage = TpmPinStorage::new(path.into(), Some(tcti));
-            let pin_storage = Arc::new(Mutex::new(pin_storage));
-            let service = AuthenticatorService::with_pin_storage(
-                storage,
-                Some(pin_storage),
-                security_config,
-                pin_config,
-                uv_config,
-            )?;
-            run_with_service(service, uhid, shutdown)
+            } => {
+                let gpg_backend = gpg_backend.parse::<storage::pass::GpgBackend>()?;
+                let storage = PassStorageAdapter::new_with_options_and_git_sync(
+                    store_path.clone().into(),
+                    path.clone().into(),
+                    gpg_backend,
+                    allow_storage_creation,
+                    pass_git_sync,
+                )?;
+                let pass_sync = storage.sync_handle();
+                let pin_storage = PassPinStorage::new_with_sync(
+                    store_path.into(),
+                    path.into(),
+                    gpg_backend,
+                    pass_sync,
+                );
+                let pin_storage = Arc::new(Mutex::new(pin_storage));
+                let service = AuthenticatorService::with_pin_storage(
+                    storage,
+                    Some(pin_storage),
+                    security_config,
+                    pin_config,
+                    uv_config,
+                )?;
+                run_with_service(service, uhid, shutdown)
+            }
+            #[cfg(feature = "tpm")]
+            BackendConfig::Tpm {
+                path,
+                tcti,
+                portable,
+            } => {
+                if portable {
+                    use storage::tpm::portable::build_portable_bundle;
+
+                    let (provider, storage, pin_storage) = build_portable_bundle(
+                        path.clone().into(),
+                        Some(tcti.clone()),
+                        allow_storage_creation,
+                    )?;
+                    let pin_storage = Arc::new(Mutex::new(pin_storage));
+                    let service = AuthenticatorService::with_pin_storage_and_key_provider(
+                        storage,
+                        Some(pin_storage),
+                        provider,
+                        security_config,
+                        pin_config,
+                        uv_config,
+                    )?;
+                    run_with_service(service, uhid, shutdown)
+                } else {
+                    let storage = TpmStorageAdapter::new_with_options(
+                        path.clone().into(),
+                        Some(tcti.clone()),
+                        allow_storage_creation,
+                    )?;
+                    let pin_storage = TpmPinStorage::new(path.into(), Some(tcti));
+                    let pin_storage = Arc::new(Mutex::new(pin_storage));
+                    let service = AuthenticatorService::with_pin_storage(
+                        storage,
+                        Some(pin_storage),
+                        security_config,
+                        pin_config,
+                        uv_config,
+                    )?;
+                    run_with_service(service, uhid, shutdown)
+                }
+            }
         }
     }
 }

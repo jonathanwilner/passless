@@ -33,6 +33,9 @@ pub struct SerializablePinConfig {
     /// Force PIN change flag
     #[serde(default)]
     pub force_pin_change: bool,
+    /// Credential wrapping generation, incremented on reset to invalidate wrapped credentials
+    #[serde(default)]
+    pub credential_wrapping_generation: u64,
     /// Modification timestamp in milliseconds since Unix epoch
     /// Used for conflict resolution when syncing across machines
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,6 +74,7 @@ impl From<&PinState> for SerializablePinConfig {
             min_pin_length: state.min_pin_length,
             version: state.version,
             force_pin_change: state.force_pin_change,
+            credential_wrapping_generation: state.credential_wrapping_generation,
             modified_at,
         }
     }
@@ -85,7 +89,11 @@ pub struct SerializablePinRetries {
     /// Remaining PIN retry attempts (0-8)
     #[serde(default = "default_retries")]
     pub retries: u8,
-    /// Remaining UV retry attempts (0-3)
+    /// Remaining UV retry attempts
+    ///
+    /// The serde default of 3 maintains backward compatibility with existing stored state.
+    /// The actual maximum is enforced by the configured `pin.max_uv_retries` value,
+    /// which is applied by the PinStorageWrapper during load/save operations.
     #[serde(default = "default_uv_retries")]
     pub uv_retries: u8,
     /// Auto-lock timestamp in milliseconds since Unix epoch (None = not locked)
@@ -97,6 +105,8 @@ fn default_retries() -> u8 {
     8
 }
 
+/// Serde default for UV retries - preserves backward compatibility with existing stored state.
+/// The configured maximum is applied separately by PinStorageWrapper.
 fn default_uv_retries() -> u8 {
     3
 }
@@ -105,13 +115,22 @@ impl Default for SerializablePinRetries {
     fn default() -> Self {
         Self {
             retries: 8,
-            uv_retries: 3,
+            uv_retries: 8,
             locked_until: None,
         }
     }
 }
 
 impl SerializablePinRetries {
+    /// Create new retry state with configured maximums
+    pub fn new(max_retries: u8, max_uv_retries: u8) -> Self {
+        Self {
+            retries: max_retries,
+            uv_retries: max_uv_retries,
+            locked_until: None,
+        }
+    }
+
     /// Convert to JSON bytes
     pub fn to_json_bytes(&self) -> Result<Vec<u8>, StatusCode> {
         serde_json::to_vec(self).map_err(|_| StatusCode::Other)
@@ -145,7 +164,10 @@ pub struct SerializablePinState {
     pub pin_hash: Option<Vec<u8>>,
     /// Remaining PIN retry attempts (0-8)
     pub retries: u8,
-    /// Remaining UV retry attempts (0-3)
+    /// Remaining UV retry attempts
+    ///
+    /// The serde default of 3 maintains backward compatibility with existing stored state.
+    /// The actual maximum is enforced by the configured `pin.max_uv_retries` value.
     #[serde(default = "default_uv_retries")]
     pub uv_retries: u8,
     /// Minimum PIN length (4-63)
@@ -155,6 +177,9 @@ pub struct SerializablePinState {
     /// Force PIN change flag
     #[serde(default)]
     pub force_pin_change: bool,
+    /// Credential wrapping generation, incremented on reset to invalidate wrapped credentials
+    #[serde(default)]
+    pub credential_wrapping_generation: u64,
     /// Auto-lock timestamp in milliseconds since Unix epoch (None = not locked)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub locked_until: Option<u64>,
@@ -165,10 +190,11 @@ impl Default for SerializablePinState {
         Self {
             pin_hash: None,
             retries: 8,
-            uv_retries: 3,
+            uv_retries: 8,
             min_pin_length: 4,
             version: 0,
             force_pin_change: false,
+            credential_wrapping_generation: 0,
             locked_until: None,
         }
     }
@@ -184,6 +210,7 @@ impl From<&PinState> for SerializablePinState {
             version: state.version,
             force_pin_change: state.force_pin_change,
             locked_until: state.locked_until,
+            credential_wrapping_generation: state.credential_wrapping_generation,
         }
     }
 }
@@ -202,6 +229,7 @@ impl From<SerializablePinState> for PinState {
             version: state.version,
             force_pin_change: state.force_pin_change,
             locked_until: state.locked_until,
+            credential_wrapping_generation: state.credential_wrapping_generation,
         }
     }
 }
@@ -227,6 +255,7 @@ impl SerializablePinState {
             version: config.version,
             force_pin_change: config.force_pin_change,
             locked_until: retries.locked_until,
+            credential_wrapping_generation: config.credential_wrapping_generation,
         }
     }
 }
@@ -243,6 +272,14 @@ pub trait PinStorage: Send + Sync {
 
     /// Save PIN state to storage
     fn save_pin_state(&self, state: &PinState) -> Result<(), StatusCode>;
+
+    /// Check if PIN is configured without triggering storage sync
+    ///
+    /// Default implementation loads the full state. Backends with expensive sync
+    /// operations should override this to check cached state first.
+    fn is_pin_configured(&self) -> Result<bool, StatusCode> {
+        Ok(self.load_pin_state()?.pin_hash.is_some())
+    }
 }
 
 /// No-op PIN storage implementation
@@ -253,5 +290,19 @@ impl PinStorage for () {
 
     fn save_pin_state(&self, _state: &PinState) -> Result<(), StatusCode> {
         Ok(())
+    }
+}
+
+impl PinStorage for Box<dyn PinStorage> {
+    fn load_pin_state(&self) -> Result<PinState, StatusCode> {
+        (**self).load_pin_state()
+    }
+
+    fn save_pin_state(&self, state: &PinState) -> Result<(), StatusCode> {
+        (**self).save_pin_state(state)
+    }
+
+    fn is_pin_configured(&self) -> Result<bool, StatusCode> {
+        (**self).is_pin_configured()
     }
 }

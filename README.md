@@ -13,15 +13,20 @@
 Passless is a software FIDO2 authenticator that emulates hardware security keys. Built with
 [soft-fido2](https://github.com/pando85/soft-fido2), it runs as a virtual UHID device on Linux.
 
-It also includes client capabilities for interacting with any FIDO2 authenticator.
+It also includes client capabilities for interacting with any FIDO2 authenticator. Experimental
+agent mode can broker policy-controlled WebAuthn for explicitly configured local automation without
+exposing credential private keys to the agent.
 
 > [!IMPORTANT]
 >
-> Browsers running in sandboxed environments (for example, installed via the Ubuntu App Center) may
-> not be able to communicate with the authenticator out of the box. To enable this, you can use the
-> `credentialsd` service provided by the
-> ["Credentials for Linux" project](https://github.com/linux-credentials/credentialsd) to allow
-> sandboxed apps — including browsers — to access FIDO2 / WebAuthn credentials on Linux.
+> **Client compatibility:** Sandboxed environments (Flatpak, Snap) and some Electron applications
+> may not be able to communicate with the authenticator out of the box. The
+> [Credentials for Linux](https://github.com/linux-credentials/credentialsd) project is developing
+> a system credential service and browser integrations that may provide a portal-style path for
+> confined applications. Current integrations are experimental and do not automatically enable
+> arbitrary Electron, Flatpak, or Snap applications. See
+> [docs/CLIENT_COMPATIBILITY.md](docs/CLIENT_COMPATIBILITY.md) for details on compatibility
+> boundaries, troubleshooting, and credentialsd integration.
 
 ## ⚠️ Security Warning <!-- omit in toc -->
 
@@ -38,10 +43,13 @@ accounts or stricter threat models.
 Users should choose the solution that best fits their own security and practicality requirements.
 
 - [Features](#features)
+- [Agent authentication (experimental)](#agent-authentication-experimental)
+- [Android](#android)
 - [Configuration](#configuration)
 - [Installation](#installation)
   - [Cargo](#cargo)
   - [Arch Linux](#arch-linux)
+- [Permissions and Hardening](#permissions-and-hardening)
 - [Acknowledgements](#acknowledgements)
 
 ## Features
@@ -52,10 +60,75 @@ Users should choose the solution that best fits their own security and practical
 - PIN support with configurable enforcement policies
 - Storage backends:
   - [pass](https://www.passwordstore.org/) (encrypted, git-synced)
-  - TPM 2.0 (Experimental)
+  - TPM 2.0 (Experimental), including a [portable TPM backend](docs/TPM_PORTABLE.md)
+    with TPM-resident non-exportable keys syncable across devices via a recovery seed
   - Local filesystem (testing only)
 - Security hardening (memory locking, core dump prevention)
 - Credential management via CTAP commands
+- Encrypted credential [backup and restore](docs/CREDENTIAL_BACKUP.md) (software credentials)
+
+## Agent authentication (experimental)
+
+> [!WARNING]
+>
+> Agent mode is implemented but **not yet validated for production use**. Interfaces,
+> configuration fields, and behavior may change without notice.
+
+Passless can broker WebAuthn authentication for explicitly configured local agents while keeping
+credential private keys inside the Passless daemon and configured backend/key provider. The agent
+receives a bounded authentication capability, not raw signing-key material.
+
+Two identity modes are available:
+
+- **`isolated`** — recommended for unattended automation. The agent has its own credential
+  namespace and RP identity and cannot enumerate or sign with the human credential namespace.
+- **`same-user`** — privileged delegation of the existing human WebAuthn identity. The daemon uses
+  the human credential backend, so an autonomous profile can authenticate as the human within its
+  configured RP and action policy.
+
+For every intercepted ceremony, the daemon re-evaluates the browser-derived origin and RP,
+credential scope, current policy generation, session bounds, operation budget, replay state, and
+audit requirements before credential use.
+
+This boundary controls **authentication authority**, not the actions available after login. Once a
+WebAuthn ceremony succeeds, an agent controlling the managed browser can exercise whatever
+application authority that authenticated RP session provides. Passless is therefore not an
+application-level authorization proxy.
+
+For unattended automation, prefer RP-native scoped mechanisms such as OAuth, application
+installations, service accounts, or workload identity when they are available. Agent mode is most
+useful when a workflow genuinely needs to authenticate through WebAuthn.
+
+See the [agent-mode overview](docs/agents/README.md) for configuration and threat-model guidance,
+and read the [agent security model](docs/agents/security.md) before enabling autonomous
+authentication.
+
+## Android
+
+[Password Store (Passkey Edition)](https://github.com/pando85/Android-Password-Store) is the
+Android companion application for managing passkeys on mobile devices. It extends the well-known
+[`pass`](https://www.passwordstore.org/) password manager with full FIDO2/WebAuthn credential
+support.
+
+### Credential Provider
+
+Password Store registers as an Android Credential Manager provider, allowing supported applications
+and browsers to request WebAuthn passkey operations directly from the device. This enables
+passwordless authentication on Android using the same credentials managed by Passless on desktop.
+
+### Interoperability
+
+Passkeys created by Passless can be imported and used on Android, and passkeys created on Android
+can be used by Passless on desktop. Both tools share the same encrypted CBOR credential format and
+operate on the same `pass`-compatible directory structure, so credentials synchronize seamlessly
+through the existing git-backed `pass` store.
+
+### Installation
+
+Password Store (Passkey Edition) is available from:
+
+- [GitHub Releases](https://github.com/pando85/Android-Password-Store/releases)
+- [F-Droid](https://f-droid.org/packages/app.passwordstore.pando85/)
 
 ## PIN Support
 
@@ -104,12 +177,19 @@ enforcement = "optional"
 # Minimum PIN length (4-63 characters)
 min_length = 4
 
-# Maximum retry attempts before lockout
+# Maximum PIN retry attempts before lockout
 max_retries = 8
+
+# Maximum user verification retry attempts before UV is blocked
+# Use `passless client pin uv-reset` to restore after authentication
+max_uv_retries = 8
 ```
 
 Note: For enhanced security with hardware-backed protection, consider using the TPM backend
-which seals credentials to the TPM hardware.
+which seals credentials to the TPM hardware. The experimental
+[portable TPM backend](docs/TPM_PORTABLE.md) goes further: signing keys are generated inside
+the TPM and never exposed to host memory, and credential blobs can be synchronized across
+multiple TPMs provisioned from the same recovery seed.
 
 ## Configuration
 
@@ -125,6 +205,37 @@ passless config print > ~/.config/passless/config.toml
 
 You can then edit this file to customize the storage backend, security settings, and other options.
 Command-line arguments will override settings from the configuration file.
+
+### Headless automatic interaction
+
+By default, Passless uses the desktop notification service when a WebAuthn operation needs local
+user-presence or notification-based user-verification confirmation. A trusted headless deployment
+can explicitly replace those confirmation prompts with automatic approval:
+
+```bash
+PASSLESS_INTERACTION_MODE=automatic passless
+```
+
+For a systemd service, set the same variable in the service environment, for example:
+
+```ini
+Environment=PASSLESS_INTERACTION_MODE=automatic
+```
+
+> [!WARNING]
+>
+> `automatic` deliberately removes the human confirmation boundary for WebAuthn prompts that would
+> otherwise use desktop notifications. It can therefore satisfy user presence and notification-based
+> user verification without a human gesture. Use it only when the host and all processes able to
+> reach the authenticator are inside the intended trust boundary.
+
+The default is `desktop`. An unknown `PASSLESS_INTERACTION_MODE` value is rejected rather than
+falling back to automatic approval. Likewise, an unavailable or broken D-Bus notification service
+never enables automatic approval implicitly.
+
+This setting only changes WebAuthn UP/UV confirmation. General yes/no prompts used for storage
+initialization or key selection remain interactive, and PIN policies that require PIN verification
+are still evaluated before the notification fallback path is reached.
 
 ## Installation
 
@@ -159,6 +270,23 @@ or the binary from AUR:
 ```bash
 yay -S passless-bin
 ```
+
+## Permissions and Hardening
+
+Passless runs as an unprivileged user and requires only regular-user read/write access to
+`/dev/uhid`. Root is neither required nor recommended.
+
+For detailed setup instructions, backend-specific permissions, hardened systemd service examples,
+and troubleshooting, see [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
+
+## Single-Instance Enforcement
+
+Only one Passless daemon may own a given backend state directory at a time. Starting a second
+daemon against the same backend fails immediately with a clear error. Multiple daemons are
+supported only when each uses a different backend state path.
+
+Client commands (`passless client ...`, `passless config print`) do not acquire the daemon lock
+and work normally while the authenticator is running.
 
 ## Acknowledgements
 

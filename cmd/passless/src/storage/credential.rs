@@ -160,9 +160,19 @@ pub struct Credential<'a> {
     #[serde(with = "sec_bytes_serde")]
     pub private_key: SecBytes,
 
+    #[serde(default)]
+    pub key_provider: Option<Vec<u8>>,
+
+    #[serde(default)]
+    pub key_format_version: Option<u16>,
+
     pub created: i64,
 
     pub discoverable: bool,
+
+    /// Backup eligibility and current backup state.
+    #[serde(default)]
+    pub backup_state: soft_fido2::CredentialBackupState,
 
     #[serde(default)]
     pub extensions: Extensions,
@@ -172,15 +182,27 @@ impl<'a> Credential<'a> {
     /// Create a new Credential from a soft_fido2::Credential (zero-copy)
     #[inline]
     pub fn from_soft_fido2(cred: &'a soft_fido2::Credential) -> Self {
+        let is_software = cred.key.provider.is_software();
         Self {
             id: std::borrow::Cow::Borrowed(&cred.id),
             rp: RelyingParty::from_soft_fido2(&cred.rp),
             user: User::from_soft_fido2(&cred.user),
             sign_count: cred.sign_count,
             alg: cred.alg,
-            private_key: cred.private_key.clone(),
+            private_key: cred.key.material.clone(),
+            key_provider: if is_software {
+                None
+            } else {
+                Some(cred.key.provider.as_bytes().to_vec())
+            },
+            key_format_version: if is_software {
+                None
+            } else {
+                Some(cred.key.format_version)
+            },
             created: cred.created,
             discoverable: cred.discoverable,
+            backup_state: cred.backup_state,
             extensions: Extensions {
                 cred_protect: cred.extensions.cred_protect,
                 hmac_secret: cred.extensions.hmac_secret,
@@ -193,6 +215,7 @@ impl<'a> Credential<'a> {
     #[inline]
     #[allow(dead_code)]
     pub fn from_soft_fido2_ref(cred_ref: soft_fido2::CredentialRef<'a>) -> Self {
+        let is_software = cred_ref.key.provider.is_software();
         Self {
             id: std::borrow::Cow::Borrowed(cred_ref.id),
             rp: RelyingParty {
@@ -206,9 +229,20 @@ impl<'a> Credential<'a> {
             },
             sign_count: *cred_ref.sign_count,
             alg: *cred_ref.alg,
-            private_key: cred_ref.private_key.clone(),
+            private_key: cred_ref.key.material.clone(),
+            key_provider: if is_software {
+                None
+            } else {
+                Some(cred_ref.key.provider.as_bytes().to_vec())
+            },
+            key_format_version: if is_software {
+                None
+            } else {
+                Some(cred_ref.key.format_version)
+            },
             created: *cred_ref.created,
             discoverable: *cred_ref.discoverable,
+            backup_state: *cred_ref.backup_state,
             extensions: Extensions {
                 cred_protect: cred_ref.cred_protect.copied(),
                 hmac_secret: None,
@@ -219,15 +253,25 @@ impl<'a> Credential<'a> {
 
     /// Convert to owned soft_fido2::Credential
     pub fn to_soft_fido2(&self) -> soft_fido2::Credential {
+        let key = match (&self.key_provider, self.key_format_version) {
+            (Some(provider_bytes), Some(version)) => soft_fido2_ctap::CredentialKey::new(
+                soft_fido2_ctap::CredentialKeyProviderId::new(provider_bytes),
+                version,
+                self.private_key.clone(),
+            ),
+            _ => soft_fido2_ctap::CredentialKey::software(self.private_key.clone()),
+        };
+
         soft_fido2::Credential {
             id: self.id.to_vec(),
             rp: self.rp.to_soft_fido2(),
             user: self.user.to_soft_fido2(),
             sign_count: self.sign_count,
             alg: self.alg,
-            private_key: self.private_key.clone(),
+            key,
             created: self.created,
             discoverable: self.discoverable,
+            backup_state: self.backup_state,
             extensions: soft_fido2::Extensions {
                 cred_protect: self.extensions.cred_protect,
                 hmac_secret: self.extensions.hmac_secret,
@@ -250,8 +294,11 @@ impl<'a> Credential<'a> {
             sign_count: self.sign_count,
             alg: self.alg,
             private_key: self.private_key,
+            key_provider: self.key_provider,
+            key_format_version: self.key_format_version,
             created: self.created,
             discoverable: self.discoverable,
+            backup_state: self.backup_state,
             extensions: self.extensions,
         }
     }
@@ -267,6 +314,49 @@ impl<'a> Credential<'a> {
     ///
     /// Format: Vec<u8> as CBOR arrays of integers (original soft-fido2 pre-serde_bytes format)
     pub fn from_bytes(data: &[u8]) -> Result<Credential<'static>, soft_fido2::Error> {
+        mod flexible_backup_state {
+            use serde::de::{self, Visitor};
+
+            pub fn deserialize<'de, D>(
+                deserializer: D,
+            ) -> Result<soft_fido2::CredentialBackupState, D::Error>
+            where
+                D: de::Deserializer<'de>,
+            {
+                struct BackupStateVisitor;
+
+                impl<'de> Visitor<'de> for BackupStateVisitor {
+                    type Value = soft_fido2::CredentialBackupState;
+
+                    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                        f.write_str("a boolean or camelCase string")
+                    }
+
+                    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+                        Ok(if v {
+                            soft_fido2::CredentialBackupState::BackedUp
+                        } else {
+                            soft_fido2::CredentialBackupState::NotEligible
+                        })
+                    }
+
+                    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                        match v {
+                            "notEligible" => Ok(soft_fido2::CredentialBackupState::NotEligible),
+                            "eligible" => Ok(soft_fido2::CredentialBackupState::Eligible),
+                            "backedUp" => Ok(soft_fido2::CredentialBackupState::BackedUp),
+                            _ => Err(de::Error::unknown_variant(
+                                v,
+                                &["notEligible", "eligible", "backedUp"],
+                            )),
+                        }
+                    }
+                }
+
+                deserializer.deserialize_any(BackupStateVisitor)
+            }
+        }
+
         #[derive(serde::Deserialize)]
         struct OwnedCredential {
             #[serde(deserialize_with = "flexible_bytes::deserialize")]
@@ -277,8 +367,14 @@ impl<'a> Credential<'a> {
             alg: i32,
             #[serde(deserialize_with = "flexible_bytes::deserialize")]
             private_key: Vec<u8>,
+            #[serde(default)]
+            key_provider: Option<Vec<u8>>,
+            #[serde(default)]
+            key_format_version: Option<u16>,
             created: i64,
             discoverable: bool,
+            #[serde(default, deserialize_with = "flexible_backup_state::deserialize")]
+            backup_state: soft_fido2::CredentialBackupState,
             #[serde(default)]
             extensions: Extensions,
         }
@@ -314,8 +410,11 @@ impl<'a> Credential<'a> {
             sign_count: owned.sign_count,
             alg: owned.alg,
             private_key: SecBytes::new(owned.private_key),
+            key_provider: owned.key_provider,
+            key_format_version: owned.key_format_version,
             created: owned.created,
             discoverable: owned.discoverable,
+            backup_state: owned.backup_state,
             extensions: owned.extensions,
         })
     }
@@ -455,9 +554,10 @@ mod tests {
             },
             sign_count: 42,
             alg: -7,
-            private_key: SecBytes::new(vec![0u8; 32]),
+            key: soft_fido2_ctap::CredentialKey::software(SecBytes::new(vec![0u8; 32])),
             created: 1234567890,
             discoverable: true,
+            backup_state: soft_fido2::CredentialBackupState::NotEligible,
             extensions: soft_fido2::Extensions {
                 cred_protect: Some(1),
                 hmac_secret: None,
@@ -465,18 +565,11 @@ mod tests {
             },
         };
 
-        // Convert to our format (zero-copy)
         let our_cred = Credential::from_soft_fido2(&soft_cred);
 
-        // Serialize
-        let _bytes = our_cred.to_bytes().expect("Serialization should succeed");
-
-        // Test migration: read soft-fido2 bytes using auto deserializer
-        let soft_bytes = soft_cred
-            .to_bytes()
-            .expect("Should be able to serialize soft-fido2 credential");
+        let our_bytes = our_cred.to_bytes().expect("Serialization should succeed");
         let deserialized =
-            Credential::from_bytes(&soft_bytes).expect("Should migrate from soft-fido2 format");
+            Credential::from_bytes(&our_bytes).expect("Should deserialize our format");
 
         // Verify all fields match
         assert_eq!(deserialized.id.as_ref(), &[1, 2, 3, 4]);
@@ -486,42 +579,43 @@ mod tests {
         assert_eq!(deserialized.alg, -7);
         assert_eq!(deserialized.created, 1234567890);
         assert!(deserialized.discoverable);
+        assert_eq!(
+            deserialized.backup_state,
+            soft_fido2::CredentialBackupState::NotEligible
+        );
     }
 
     #[test]
-    fn test_backward_compatibility() {
-        // Create a credential in soft-fido2 format
-        let soft_cred = soft_fido2::Credential {
-            id: vec![1, 2, 3, 4],
-            rp: soft_fido2_ctap::types::RelyingParty {
-                id: "example.com".to_string(),
+    fn test_minimal_credential_roundtrip() {
+        let our_cred = Credential {
+            id: std::borrow::Cow::Owned(vec![1, 2, 3, 4]),
+            rp: RelyingParty {
+                id: std::borrow::Cow::Owned("example.com".to_string()),
                 name: None,
             },
-            user: soft_fido2_ctap::types::User {
-                id: vec![5, 6, 7, 8],
-                name: Some("user".to_string()),
+            user: User {
+                id: std::borrow::Cow::Owned(vec![5, 6, 7, 8]),
+                name: Some(std::borrow::Cow::Owned("user".to_string())),
                 display_name: None,
             },
             sign_count: 0,
             alg: -7,
             private_key: SecBytes::new(vec![0u8; 32]),
+            key_provider: None,
+            key_format_version: None,
             created: 0,
             discoverable: true,
-            extensions: soft_fido2::Extensions::default(),
+            backup_state: soft_fido2::CredentialBackupState::NotEligible,
+            extensions: Extensions::default(),
         };
 
-        // Serialize in soft-fido2's native format
-        let soft_bytes = soft_cred
-            .to_bytes()
-            .expect("Should be able to serialize soft-fido2 credential");
+        let our_bytes = our_cred.to_bytes().expect("Should serialize our format");
+        let deserialized =
+            Credential::from_bytes(&our_bytes).expect("Should deserialize our format");
 
-        // Read using auto deserializer (should use soft-fido2 bridge for migration)
-        let our_cred =
-            Credential::from_bytes(&soft_bytes).expect("Should migrate from soft-fido2 format");
-
-        assert_eq!(our_cred.id.as_ref(), &[1, 2, 3, 4]);
-        assert_eq!(our_cred.rp.id, "example.com");
-        assert_eq!(our_cred.user.id.as_ref(), &[5, 6, 7, 8]);
+        assert_eq!(deserialized.id.as_ref(), &[1, 2, 3, 4]);
+        assert_eq!(deserialized.rp.id, "example.com");
+        assert_eq!(deserialized.user.id.as_ref(), &[5, 6, 7, 8]);
     }
 
     #[test]
@@ -540,9 +634,10 @@ mod tests {
             },
             sign_count: 42,
             alg: -7,
-            private_key: SecBytes::new(vec![0u8; 32]),
+            key: soft_fido2_ctap::CredentialKey::software(SecBytes::new(vec![0u8; 32])),
             created: 1234567890,
             discoverable: true,
+            backup_state: soft_fido2::CredentialBackupState::NotEligible,
             extensions: soft_fido2::Extensions {
                 cred_protect: Some(1),
                 hmac_secret: None,

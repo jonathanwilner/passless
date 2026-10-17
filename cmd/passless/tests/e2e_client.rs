@@ -21,6 +21,8 @@ use sha2::{Digest, Sha256};
 
 const RP_ID: &str = "example.com";
 const ORIGIN: &str = "https://example.com";
+const CMD_PASSLESS_RESET_UV_RETRIES: u8 = 0x42;
+const RESET_UV_RETRIES_SUBCOMMAND: u8 = 0x01;
 
 /// Helper to connect to the first available authenticator
 fn connect_to_authenticator() -> Result<soft_fido2::Transport, Box<dyn std::error::Error>> {
@@ -190,10 +192,10 @@ fn test_client_info() {
 
                 assert_eq!(option_bool("rk"), Some(true));
                 assert_eq!(option_bool("up"), Some(true));
-                assert_eq!(option_bool("plat"), Some(true));
+                assert_eq!(option_bool("plat"), Some(false));
                 assert_eq!(option_bool("uv"), Some(true));
                 assert_eq!(option_bool("clientPin"), Some(false));
-                assert_eq!(option_bool("alwaysUv"), Some(false));
+                assert_eq!(option_bool("alwaysUv"), Some(true));
             }
         }
 
@@ -814,11 +816,99 @@ fn get_uv_token_with_pin(
     let mut encapsulation =
         soft_fido2::PinUvAuthEncapsulation::new(transport, soft_fido2::PinProtocol::V2)?;
     // Permission: 0x01 = makeCredential, 0x02 = getAssertion
+    // RP ID is required for makeCredential/getAssertion permissions per CTAP 2.1
     let token = encapsulation.get_pin_uv_auth_token_using_pin_with_permissions(
-        transport, pin, 0x03, // makeCredential | getAssertion
-        None,
+        transport,
+        pin,
+        0x03, // makeCredential | getAssertion
+        Some("example.com"),
     )?;
     Ok(token)
+}
+
+fn get_uv_retries(transport: &mut soft_fido2::Transport) -> Result<u8, Box<dyn std::error::Error>> {
+    use soft_fido2_ctap::cbor::MapBuilder;
+
+    let params = MapBuilder::new().insert(0x02, 0x07u8)?.build()?;
+    let response = transport.send_ctap_command(0x06, &params, 30000)?;
+
+    if response.is_empty() {
+        return Err("getUvRetries returned empty response".into());
+    }
+
+    use ciborium::Value;
+    let cbor_value: Value = if response[0] == 0x00 {
+        ciborium::from_reader(&response[1..])?
+    } else {
+        ciborium::from_reader(&response[..])?
+    };
+
+    if let Value::Map(map) = cbor_value {
+        for (key, value) in map {
+            if key == Value::Integer(0x05.into())
+                && let Value::Integer(retries) = value
+            {
+                return u8::try_from(i128::from(retries)).map_err(|_| "invalid uvRetries".into());
+            }
+        }
+    }
+
+    Err("uvRetries missing from response".into())
+}
+
+fn build_authenticated_uv_reset_payload(
+    transport: &mut soft_fido2::Transport,
+    pin: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use soft_fido2_ctap::cbor::MapBuilder;
+
+    let mut encapsulation =
+        soft_fido2::PinUvAuthEncapsulation::new(transport, soft_fido2::PinProtocol::V2)?;
+    let token = encapsulation.get_pin_uv_auth_token_using_pin_with_permissions(
+        transport, pin, 0x04, // credentialManagement
+        None,
+    )?;
+    let auth_data = [CMD_PASSLESS_RESET_UV_RETRIES, RESET_UV_RETRIES_SUBCOMMAND];
+    let pin_uv_auth_param = encapsulation.authenticate(&auth_data, &token)?;
+
+    Ok(MapBuilder::new()
+        .insert(0x01, RESET_UV_RETRIES_SUBCOMMAND)?
+        .insert(0x03, 0x02u8)?
+        .insert_bytes(0x04, &pin_uv_auth_param)?
+        .build()?)
+}
+
+#[test]
+#[ignore]
+fn test_authenticated_uv_retry_reset_command() {
+    println!("\n═══════════════════════════════════════");
+    println!("  TEST: Authenticated UV Retry Reset");
+    println!("═══════════════════════════════════════\n");
+
+    let mut harness = AuthenticatorHarness::with_local().expect("Failed to create harness");
+    harness.start().expect("Failed to start authenticator");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    let mut transport = connect_to_authenticator().expect("Failed to connect");
+    set_pin(&mut transport, "1234").expect("Failed to set PIN");
+
+    let unauthenticated = transport.send_ctap_command(CMD_PASSLESS_RESET_UV_RETRIES, &[], 30000);
+    if let Ok(response) = unauthenticated {
+        assert_ne!(response, vec![0x00, 0xa0]);
+    }
+
+    let payload = build_authenticated_uv_reset_payload(&mut transport, "1234")
+        .expect("Failed to build authenticated reset payload");
+    let authenticated = transport
+        .send_ctap_command(CMD_PASSLESS_RESET_UV_RETRIES, &payload, 30000)
+        .expect("Failed to send authenticated reset command");
+    assert_eq!(authenticated, vec![0xa1, 0x01, 0x08]);
+    assert_eq!(
+        get_uv_retries(&mut transport).expect("Failed to get UV retries"),
+        8
+    );
+
+    harness.stop();
 }
 
 #[test]
@@ -936,8 +1026,9 @@ fn test_pin_enforcement_required_blocks_without_pin() {
     set_pin(&mut transport, "1234").expect("Failed to set PIN");
     println!("   ✓ PIN set");
 
-    // With enforcement=optional (default) and always_uv=false (default),
-    // notification fallback should be used
+    // With enforcement=optional (default) and always_uv=true (default),
+    // PIN should be required when PIN is set. However, in E2E test mode
+    // with PASSLESS_E2E_AUTO_ACCEPT_UV=1, notification fallback is used.
     // We test this by attempting a registration (which should work via notification fallback
     // in E2E test mode with PASSLESS_E2E_AUTO_ACCEPT_UV=1)
     println!("\n📝 Testing registration with PIN set (enforcement=optional)...");
