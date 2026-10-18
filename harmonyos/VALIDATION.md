@@ -64,45 +64,48 @@ policy, and recipient public keys. The check performed no writes. This proves
 the client read model against GitHub; it does not prove the HarmonyOS HTTP bridge.
 Live commit/push and device transport acceptance remain untested.
 
-## Device and acceptance gates still open
+## Physical-device acceptance
 
-Both the canonical `C:\Program Files\Huawei\DevEco Studio` HDC and the resolved
-DevEco 26 HDC returned `[Empty]` when listing targets. No device was installed,
-launched, or captured. The current preview has no signed HAP or device-specific
-profile for `com.thewilners.passless`.
+After the user enabled HDC forwarding, Armstrong reached the Pura X Max at
+`100.96.211.107:37091`. Monaco used an authenticated SSH reverse relay on
+`127.0.0.1:37996`. The live device reported HOP-AL10,
+OpenHarmony-7.0.0.105, foreground verified admin user 100.
 
-Required next acceptance sequence:
+The existing Huawei developer account's DE region authenticated successfully.
+A development profile was issued for `com.thewilners.passless` and the registered
+Pura X Max, using an existing matching developer certificate and protected local
+signing key. Signature verification succeeded. HDC installation explicitly to
+user 100 and EntryAbility launch both succeeded.
 
-1. Connect and identify the intended HarmonyOS target and active user.
-2. Obtain a Huawei development profile for this bundle and that device; sign
-   and verify with the existing DevEco signer.
-3. Install and launch. Verify native file picking and saving, ArkWeb WebCrypto
-   availability on the rawfile origin, OpenPGP interoperability, background
-   lock, GitHub token clearing and no-redirect transport, conflict rejection, and rejection of navigation away from bundled resources.
-4. Publish screenshot evidence to the authenticated debug gallery.
+Signed artifact: `build/passless-0.1.0-api26-enrollment-signed.hap`
 
-The host tests exercise the bundled implementation. They do not establish
-ArkWeb/device runtime behavior. This HAP is a hybrid companion preview, not a
-complete Android Password Store feature port or a system passkey provider.
+SHA-256: `99a3fcf614bf56fb968c9407b0034d506e2f50ad9a5f7e20906f6790a759defc`
+
+The installed UI renders its enrollment, unlock and file workflows and scrolls.
+Published physical-device evidence:
+
+- [Initial installed UI](https://debug.thewilners.com/#shot=20261018T224433Z-armstrong-passless-harmony-d64129cb5b-a7917429)
+- [Scrolled enrollment and unlock UI](https://debug.thewilners.com/#shot=20261018T224540Z-armstrong-passless-harmony-f9bfe0e921-e3a0439f)
+
+Runtime interaction stopped at the user's request to leave the phone available.
+An attempted synthetic enrollment did not establish key-generation success.
+Actual ArkWeb WebCrypto, key generation, native file selection/export,
+decryption/editing, Huawei HTTP GitHub reads, background lock and token clearing
+remain unverified on the physical device. No fleet private keys were copied,
+no phone key was enrolled, and no repository writes were performed.
+
+Host enrollment validation passed all 25 tests, including encrypted recovery
+armor, wrong-passphrase refusal, matching public fingerprint, and decrypting a
+message addressed to the generated key. Lifecycle tests cover generation
+cancellation and passphrase clearing. DevEco API26 assembleHap succeeded.
+Tracked sessions: `test-passless-harmony-enrollment-v3` and
+`build-passless-harmony-enrollment`.
+
+This HAP remains a hybrid companion preview. Generic Git/SSH transport,
+hardware-backed persistent key custody and native system passkey-provider
+integration remain pending. Host tests and successful installation do not prove
+those capabilities or the remaining physical-device behaviors.
 
 The SDK emits previewer ICU-file warnings, a module SemVer warning, duplicate
 resource-name warnings, and an ArkTS deprecated-context warning. Packaging
-succeeded. These warnings are preserved in the tracked build log and are not
-runtime proof.
-
-Phone enrollment follow-up: synthetic test checks encrypted recovery armor,
-wrong-passphrase refusal, matching public fingerprint and decrypting a message
-addressed to the new key. Lifecycle test checks background cancellation of
-pending generation and clearing the recovery passphrase. Device key generation
-and document-picker export still require physical acceptance.
-
-Monaco HDC connection attempts to both Pura X Max Tailscale peers
-`100.69.83.125:37091` and `100.96.211.107:37091` failed. HDC reported both
-TCP Offline with unknown identity. Installation cannot proceed until a live
-shell identifies the device and active user, followed by a matching bundle/device
-signing profile. No private fleet keys were transferred.
-
-Enrollment follow-up validation: all 25 host tests passed; DevEco API 26
-assembleHap succeeded. Artifact `build/passless-0.1.0-api26-enrollment-unsigned.hap`.
-Pura X Max peer `100.96.211.107` subsequently became online in Tailscale, but
-Monaco HDC connection still failed and a direct TCP check timed out on port 37091.
+succeeded; the warnings remain in the tracked build logs.
