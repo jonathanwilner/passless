@@ -4,7 +4,7 @@ let
   toml = pkgs.formats.toml { };
   environment = cfg.environment
     // lib.optionalAttrs (cfg.gnupgHome != null) { GNUPGHOME = cfg.gnupgHome; }
-    // { PASSLESS_INTERACTION_MODE = "desktop"; };
+    // { PASSLESS_INTERACTION_MODE = "desktop"; PASSLESS_USB_IDENTITY = cfg.usbIdentity; };
   # systemd parses each Environment directive as words and expands % specifiers.
   quoteEnvironment = value: "\"" + lib.replaceStrings
     [ "\\" "\"" "\n" "\r" "\t" "%" ]
@@ -26,6 +26,11 @@ in {
       type = lib.types.package;
       default = pkgs.callPackage ./package.nix { };
       description = "Passless package.";
+    };
+    usbIdentity = lib.mkOption {
+      type = lib.types.enum [ "passless" "yubikey-fido" ];
+      default = "passless";
+      description = "Host HID identity profile. yubikey-fido changes the USB VID/PID and name only; Passless AAGUID, attestation and confirmation remain unchanged.";
     };
     environment = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
