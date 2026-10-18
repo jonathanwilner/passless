@@ -1,0 +1,16 @@
+[package]
+name = "passless-notification-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Exercise the production module without hardware/credential-store integration.
+[lib]
+path = "../../cmd/passless/src/notification.rs"
+
+[dependencies]
+log.workspace = true
+notify-rust.workspace = true
+zbus.workspace = true
+async-io = "2.6"
+futures-lite = "2.6"

@@ -273,7 +273,10 @@ impl<S: CredentialStorage, P: PinStorage> AuthenticatorCallbacks for PasslessCal
             }
         };
 
-        if storage.disable_user_verification() && !is_registration && !should_verify {
+        let backend_verifies = storage.disable_user_verification();
+        drop(storage); // Never hold the storage mutex while waiting for desktop consent.
+
+        if backend_verifies && !is_registration && !should_verify {
             debug!("User verification handled by backend (e.g., GPG): {}", info);
             return Ok(UpResult::Accepted);
         }

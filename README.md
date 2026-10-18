@@ -208,6 +208,13 @@ Command-line arguments will override settings from the configuration file.
 
 ### Headless automatic interaction
 
+Quickshell displays explicit Accept/Deny buttons for consent requests. Desktop
+confirmation waits use a local monotonic deadline even when a notification server
+ignores expiry. `notification_timeout` is capped at 300 seconds; zero denies
+immediately. Yes/no setup prompts expire after 60 seconds. Server discovery has a
+2-second limit, and best-effort notification closure has a 200 ms limit. Expiry,
+closure, an unknown action, or a disconnected server never counts as acceptance.
+
 By default, Passless uses the desktop notification service when a WebAuthn operation needs local
 user-presence or notification-based user-verification confirmation. A trusted headless deployment
 can explicitly replace those confirmation prompts with automatic approval:
