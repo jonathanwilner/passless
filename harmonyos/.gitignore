@@ -1,0 +1,9 @@
+node_modules/
+.hvigor/
+oh_modules/
+build/
+entry/build/
+entry/oh_modules/
+local.properties
+entry/src/main/resources/rawfile/web/*
+!entry/src/main/resources/rawfile/web/.gitkeep
