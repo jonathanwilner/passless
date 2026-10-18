@@ -1,0 +1,1 @@
+{"name":"passless-harmony","private":true,"type":"module","scripts":{"bundle":"node scripts/bundle.mjs","test":"node --test tests/*.test.mjs"},"dependencies":{"openpgp":"6.3.1"},"devDependencies":{"esbuild":"0.25.11"}}
