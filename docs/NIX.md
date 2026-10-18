@@ -24,6 +24,8 @@ services.passless = {
 
 The host module loads `uhid` and grants members of the `passless` group access to
 `/dev/uhid`. This permits creating virtual HID devices. Select trusted users only.
+A narrowly matched hidraw rule gives the active desktop session access to the
+upstream human authenticator identity, USB `15d9:0a37`.
 The module does not run a root daemon. Log out and back in after adding membership.
 
 Import the Home Manager module for each selected user:
@@ -39,7 +41,8 @@ notification service is required for confirmation. The service explicitly uses
 Headless hosts can install the package without enabling the Home Manager service.
 
 The default storage is the user's existing GPG-encrypted `~/.password-store`,
-under `fido2`, using `gnupg-bin`. The service is skipped when the store has no `.gpg-id`, avoiding restart loops.
+under `fido2`, using `gnupg-bin`. The service is skipped when neither the credential subdirectory nor its parent
+store directories contain `.gpg-id`, avoiding restart loops.
 After provisioning, run `systemctl --user restart passless.service`.
 Initialize and unlock that store with the user's
 existing key before starting Passless. These modules do not generate keys, enroll

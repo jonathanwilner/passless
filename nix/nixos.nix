@@ -25,6 +25,7 @@ in {
     users.groups.passless.members = cfg.users;
     services.udev.extraRules = ''
       KERNEL=="uhid", GROUP="passless", MODE="0660"
+      SUBSYSTEM=="hidraw", KERNELS=="0003:15D9:0A37.*", TAG+="uaccess"
     '';
   };
 }

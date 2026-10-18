@@ -37,11 +37,24 @@ in {
         Description = "Passless FIDO2 software authenticator";
         Documentation = "https://github.com/pando85/passless";
         After = [ "graphical-session.target" ];
-        ConditionPathExists = lib.mkIf (cfg.settings.backend_type == "pass") "${cfg.settings.pass.store_path}/.gpg-id";
+        
         PartOf = [ "graphical-session.target" ];
       };
       Service = {
         ExecStart = "${lib.getExe cfg.package}";
+        # Match password-store's nearest recipient policy, including scoped stores.
+        ExecCondition = lib.mkIf (cfg.settings.backend_type == "pass") (toString (pkgs.writeShellScript "passless-store-ready" ''
+          store=${lib.escapeShellArg cfg.settings.pass.store_path}
+          path=${lib.escapeShellArg "${cfg.settings.pass.store_path}/${cfg.settings.pass.path}"}
+          while true; do
+            [ ! -r "$path/.gpg-id" ] || exit 0
+            [ "$path" != "$store" ] || exit 1
+            parent=$(${pkgs.coreutils}/bin/dirname "$path")
+            [ "$parent" != "$path" ] || exit 1
+            path=$parent
+          done
+        ''));
+
         Environment = [ "PASSLESS_INTERACTION_MODE=desktop" ];
         Restart = "on-failure";
         RestartSec = 5;
