@@ -2,6 +2,15 @@
 let
   cfg = config.services.passless;
   toml = pkgs.formats.toml { };
+  configuredPackage = if cfg.gnupgHome == null then cfg.package else pkgs.symlinkJoin {
+    name = "passless-user";
+    paths = [ cfg.package ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/passless --set GNUPGHOME ${lib.escapeShellArg cfg.gnupgHome}
+      wrapProgram $out/bin/passless-git-sync --set GNUPGHOME ${lib.escapeShellArg cfg.gnupgHome}
+    '';
+  };
 in {
   options.services.passless = {
     enable = lib.mkEnableOption "Passless desktop authenticator";
@@ -9,6 +18,12 @@ in {
       type = lib.types.package;
       default = pkgs.callPackage ./package.nix { };
       description = "Passless package.";
+    };
+    gnupgHome = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/home/alice/.local/share/passless/gnupg";
+      description = "Dedicated GPG home for both the user service and Passless CLI. Existing keys must be provisioned separately.";
     };
     settings = lib.mkOption {
       type = toml.type;
@@ -21,7 +36,7 @@ in {
       assertion = pkgs.stdenv.hostPlatform.isLinux;
       message = "Passless requires Linux UHID.";
     } ];
-    home.packages = [ cfg.package ];
+    home.packages = [ configuredPackage ];
     services.passless.settings = {
       backend_type = lib.mkDefault "pass";
       pass = {
@@ -41,7 +56,7 @@ in {
         PartOf = [ "graphical-session.target" ];
       };
       Service = {
-        ExecStart = "${lib.getExe cfg.package}";
+        ExecStart = "${configuredPackage}/bin/passless";
         # Match password-store's nearest recipient policy, including scoped stores.
         ExecCondition = lib.mkIf (cfg.settings.backend_type == "pass") (toString (pkgs.writeShellScript "passless-store-ready" ''
           store=${lib.escapeShellArg cfg.settings.pass.store_path}
@@ -55,7 +70,8 @@ in {
           done
         ''));
 
-        Environment = [ "PASSLESS_INTERACTION_MODE=desktop" ];
+        Environment = [ "PASSLESS_INTERACTION_MODE=desktop" ]
+          ++ lib.optional (cfg.gnupgHome != null) "GNUPGHOME=${cfg.gnupgHome}";
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";
