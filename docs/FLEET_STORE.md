@@ -56,6 +56,9 @@ as the sole login method. No production passkeys were created by provisioning.
 
 ## HarmonyOS status
 
-The current companion preview imports and inspects encrypted files. See
-`harmonyos/VALIDATION.md` for exact tested functionality and remaining native
-Git synchronization, credential-provider, signing and device acceptance work.
+The companion imports and inspects encrypted files, preserves original and
+policy recipients when editing, and includes GitHub-specific encrypted
+repository synchronization with conflict rejection. Its GitHub token stays in
+memory for the session. See `harmonyos/VALIDATION.md` for tested functionality
+and remaining signing, device transport, live write and credential-provider
+acceptance work.
