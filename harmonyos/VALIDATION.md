@@ -2,7 +2,7 @@
 
 ## Passed
 
-- Host suite: 14 tests, 14 passed, 0 failed.
+- Host suite: 23 tests, 23 passed, 0 failed.
 - Two upstream Android Password Store binary CBOR fixtures decode correctly.
 - Canonical and legacy backup-state formats pass; conflicting states fail.
 - GnuPG decrypts this companion's OpenPGP ciphertext; the companion decrypts
@@ -16,23 +16,24 @@
 - DevEco 26 on Monaco compiled ArkTS and packaged an unsigned HAP with the
   installed HarmonyOS API26 Beta1 SDK `26.0.0.23`.
 - Retrieved HAP manifest: bundle `com.thewilners.passless`, target API26,
-  minimum API24, phone/tablet/2in1, no requested permissions.
+  minimum API24, phone/tablet/2in1, INTERNET permission for the native GitHub bridge.
 - The HAP's `app.js` SHA-256 equals the locally generated and tested bundle.
 
 Tracked sessions:
 
-- `test-passless-harmony-policy-final`
-- `build-passless-harmony-policy`
+- `test-passless-harmony-github-transport`
+- `build-passless-harmony-github-release`
+- `test-passless-harmony-github-read`
 
 Dashboard: https://nix.thewilners.com/dashboard.html
-Both commands run from Armstrong; the build invokes the Monaco toolchain over
+The commands run from Armstrong; the build invokes the Monaco toolchain over
 SSH. Their published logs therefore appear under `machines/armstrong/`.
 
 Unsigned HAP (ignored build output):
-`build/passless-0.1.0-api26-policy-unsigned.hap`
+`build/passless-0.1.0-api26-github-unsigned.hap`
 
 SHA-256:
-`a28cc4fd3cd52be07f96f443b9da10710a07e81914ba5a1b0c797a4de00726c3`
+`bc73e36e30208a7f36de83929eb30a7dc041ae7055ce5432eae97748a745b4c1`
 
 ## Recipient-policy followup
 
@@ -42,7 +43,26 @@ IDs, a fourth policy recipient can decrypt, and omitted recipients, missing
 keys, private-key bundles, invalid policy forms and hidden recipients fail.
 Original ciphertext export remains byte-preserving. A lock during encryption
 prevents export and wipes generated buffers. Imports and inspection clear prior
-plaintext and invalidate pending operations. There is no native Git sync.
+plaintext and invalidate pending operations. GitHub-specific sync fetches encrypted objects and creates optimistic commits.
+
+## GitHub acceptance boundaries
+
+Synthetic API tests verify pinned-tree reads, nearest inherited policy lookup,
+encrypted blob creation, exact commit parent, non-force ref update, changed-head
+and concurrent divergence rejection, malformed/truncated trees, and refusal of
+policy/public-key/traversal writes. Lifecycle tests verify background clearing
+calls the native session clear operation and empties the token input. Host execution of the actual native bridge source with mocked Huawei HTTP
+verifies fixed origin, redirects disabled, token/error-body exclusion from
+callbacks, pending-request destruction/invalidation, and native refusal of
+external routes, force updates and policy/public-key/traversal tree changes.
+Source review found no credential logging. Device evidence for actual Huawei
+HTTP and lifecycle behavior remains pending.
+
+A live **read-only host** check through authenticated `gh` fetched the private
+fleet repository: one encrypted readiness entry, 401-byte ciphertext, inherited
+policy, and recipient public keys. The check performed no writes. This proves
+the client read model against GitHub; it does not prove the HarmonyOS HTTP bridge.
+Live commit/push and device transport acceptance remain untested.
 
 ## Device and acceptance gates still open
 
@@ -58,7 +78,7 @@ Required next acceptance sequence:
    and verify with the existing DevEco signer.
 3. Install and launch. Verify native file picking and saving, ArkWeb WebCrypto
    availability on the rawfile origin, OpenPGP interoperability, background
-   lock, and rejection of navigation away from bundled resources.
+   lock, GitHub token clearing and no-redirect transport, conflict rejection, and rejection of navigation away from bundled resources.
 4. Publish screenshot evidence to the authenticated debug gallery.
 
 The host tests exercise the bundled implementation. They do not establish

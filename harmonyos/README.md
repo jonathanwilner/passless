@@ -1,7 +1,7 @@
 # Passless HarmonyOS companion preview
 
-This is a local-only HarmonyOS Stage app with an ArkUI shell, native document
-pickers, and an ArkWeb interface. OpenPGP.js performs credential decryption.
+This is a HarmonyOS Stage app with an ArkUI shell, native document
+pickers, a native GitHub HTTPS bridge, and an ArkWeb interface. OpenPGP.js performs credential decryption.
 It reads the portable CBOR schema used by Android Password Store
 (APS) and soft-fido2. It does not register as a system passkey provider.
 
@@ -29,7 +29,7 @@ accepted. This preview never changes passkey signature counters or backup state.
 
 ## Security and compatibility boundary
 
-No INTERNET permission is requested. The content security policy forbids network
+INTERNET permission is used only by the fixed GitHub native bridge. The content security policy forbids network
 connections, external frames, forms, and inline scripts. The document bridge
 accepts only fixed operation names. Local storage and Web SQL are disabled.
 Input and decompressed OpenPGP output are bounded to 1 MiB. Decoded private bytes
@@ -38,8 +38,8 @@ objects are garbage-collected and cannot promise deterministic zeroization.
 This is a development preview, not hardware-backed key custody.
 
 Only import secret keys on a device you intend to trust. HUKS wrapping,
-biometric unlock, secure clipboard behavior, a persistent encrypted vault, Git
-sync, recipient-policy discovery, passkey
+biometric unlock, secure clipboard behavior, a persistent encrypted vault, generic
+Git/SSH sync, passkey
 creation/signing, CTAP/BLE transport,
 and third-party credential-provider integration remain unimplemented.
 
@@ -48,12 +48,15 @@ Original encrypted exports preserve bytes. Edited passwords export to
 accept only full primary fingerprints, one per line, plus blank/comment lines.
 Hidden recipients, missing/ambiguous keys, private-key bundles, and unsupported
 GnuPG policy forms fail closed. The user must select the effective policy for
-that password: automatic inherited `.gpg-id` discovery is pending. Original
+that password: manual imports require this explicit selection. GitHub reads resolve the nearest
+ancestor policy from the pinned tree. Original
 recipients cannot be removed by supplying an incomplete policy.
 
-No native Git synchronization exists. Import/export are manual; the app performs
-no repository push or pull. See `GIT-SYNC.md` for the implementation path and
-remaining engineering and device acceptance work.
+GitHub-specific encrypted repository sync targets `jonathanwilner/passless-store`
+on `main`. The session-only token is held by the native bridge. Fetch resolves
+recipient policies and public keys from the pinned tree; edits create encrypted
+Git objects and a non-force commit update. See `GIT-SYNC.md` for conflict handling,
+permission scope and device acceptance gates. Generic Git/SSH is unimplemented.
 
 ## Build
 
