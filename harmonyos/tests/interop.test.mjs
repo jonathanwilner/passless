@@ -21,7 +21,7 @@ test('OpenPGP protected key, GnuPG cross-decryption, tamper and wrong-key reject
   await assert.rejects(unlockKey(generated.privateKey,'wrong'));
   const key=await unlockKey(generated.privateKey,'test-only-passphrase');
   const bytes=new TextEncoder().encode('synthetic password\nusername: test\n');
-  const encrypted=await encryptFile(bytes,key);
+  const encrypted=await encryptFile(bytes,[key.toPublic()]);
   assert.deepEqual(await decryptFile(encrypted,key),bytes);
   const env={...process.env,GNUPGHOME:dir};
   await writeFile(join(dir,'key.asc'),generated.privateKey,{mode:0o600});
@@ -54,4 +54,12 @@ test('backup state canonical and legacy migration rules',async()=>{
  for(const state of ['notEligible','eligible','backedUp']){const map=new Map(base);map.delete('backup_eligible');map.set('backup_state',state);assert.equal(credentialMetadata(new Uint8Array(encode(map))).backupState,state);}
  for(const [eligible,state,expected] of [[false,false,'notEligible'],[true,false,'eligible'],[true,true,'backedUp']]){const map=new Map(base);map.set('backup_eligible',eligible);map.set('backup_state',state);assert.equal(credentialMetadata(new Uint8Array(encode(map))).backupState,expected);}
  for(const [eligible,state] of [[false,true],[true,'eligible'],[true,'unknown'],[1,false]]){const map=new Map(base);map.set('backup_eligible',eligible);map.set('backup_state',state);assert.throws(()=>credentialMetadata(new Uint8Array(encode(map))));}
+});
+test('encryption helper requires explicit recipients and preserves both recipients',async()=>{
+ const make=name=>openpgp.generateKey({type:'ecc',curve:'curve25519Legacy',userIDs:[{name}],format:'object'});
+ const first=await make('Synthetic host A'),second=await make('Synthetic host B');
+ const plain=new TextEncoder().encode('synthetic shared password');
+ await assert.rejects(encryptFile(plain,first.privateKey));await assert.rejects(encryptFile(plain,[]));
+ const cipher=await encryptFile(plain,[first.publicKey,second.publicKey]);
+ assert.deepEqual(await decryptFile(cipher,first.privateKey),plain);assert.deepEqual(await decryptFile(cipher,second.privateKey),plain);
 });

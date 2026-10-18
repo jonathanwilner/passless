@@ -2,7 +2,7 @@
 
 ## Passed
 
-- Host suite: 7 tests, 7 passed, 0 failed.
+- Host suite: 12 tests, 12 passed, 0 failed.
 - Two upstream Android Password Store binary CBOR fixtures decode correctly.
 - Canonical and legacy backup-state formats pass; conflicting states fail.
 - GnuPG decrypts this companion's OpenPGP ciphertext; the companion decrypts
@@ -21,18 +21,27 @@
 
 Tracked sessions:
 
-- `test-passless-harmony-final`
-- `build-passless-harmony-api26`
+- `test-passless-harmony-recipient-final`
+- `build-passless-harmony-readonly`
 
 Dashboard: https://nix.thewilners.com/dashboard.html
 Both commands run from Armstrong; the build invokes the Monaco toolchain over
 SSH. Their published logs therefore appear under `machines/armstrong/`.
 
 Unsigned HAP (ignored build output):
-`build/passless-0.1.0-api26-unsigned.hap`
+`build/passless-0.1.0-api26-readonly-unsigned.hap`
 
 SHA-256:
-`f3c6247877c1b657d6695c3ae1190874ae1d1b9330ad32db4c73c5d71105103d`
+`b3b2d6b0309d316a23b3e198a090ee761c21fe24b757c662e7d1f3fed571327d`
+
+## Recipient-policy followup
+
+Password text is read-only. The app does not import the complete inherited
+`.gpg-id` policy, so editing and re-encryption are disabled. The native bridge
+accepts only original encrypted credential exports. Tests verify byte-preserving
+export, explicit multi-recipient encryption in the standalone helper, and
+clearing/invalidation of prior plaintext on file/key import and inspection.
+The helper is not called by the app. There is no native Git sync.
 
 ## Device and acceptance gates still open
 

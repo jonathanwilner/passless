@@ -1,8 +1,8 @@
 # Passless HarmonyOS companion preview
 
 This is a local-only HarmonyOS Stage app with an ArkUI shell, native document
-pickers, and an ArkWeb interface. OpenPGP.js performs credential encryption and
-decryption. It reads the portable CBOR schema used by Android Password Store
+pickers, and an ArkWeb interface. OpenPGP.js performs credential decryption.
+It reads the portable CBOR schema used by Android Password Store
 (APS) and soft-fido2. It does not register as a system passkey provider.
 
 ## Implemented
@@ -10,14 +10,15 @@ decryption. It reads the portable CBOR schema used by Android Password Store
 - Import an ASCII-armored OpenPGP secret key through the system document picker.
   Unlock the key with its passphrase in memory.
 - Import a binary OpenPGP `.gpg` credential produced by `pass`, APS, or Passless.
-- Decrypt password text and edit it in memory. Encrypt an exported password to
-  the unlocked key's public encryption key. The export is a new file chosen by
-  the user; it does not update a Git repository or `.gpg-id` policy.
+- Decrypt password text for read-only inspection in memory. Password editing
+  and re-encryption are disabled because the app cannot verify the complete
+  recipient list from the store's `.gpg-id` files.
 - Decrypt passkey CBOR and show relying-party ID, user name, signature counter,
   and backup state. Private key scalars are never rendered.
 - Export the original encrypted credential without decoding or rewriting it.
 - Lock after 60 seconds and when the Ability enters the background. Pending
-  unlock/decrypt/encrypt operations cannot reveal or export results after lock.
+  unlock/decrypt operations cannot reveal results after lock. Imports and new
+  inspections clear prior plaintext and invalidate pending decryption.
 - Reject oversized inputs, malformed CBOR, duplicate map keys, conflicting
   backup representations, and unauthenticated/tampered OpenPGP messages.
 
@@ -37,10 +38,16 @@ This is a development preview, not hardware-backed key custody.
 
 Only import secret keys on a device you intend to trust. HUKS wrapping,
 biometric unlock, secure clipboard behavior, a persistent encrypted vault, Git
-sync, recipient-policy discovery, passkey creation/signing, CTAP/BLE transport,
-and third-party credential-provider integration remain unimplemented. Exported
-passwords use **one recipient**: the unlocked key. Preserve the desktop store's
-`.gpg-id` recipient policy before incorporating an exported password.
+sync, recipient-policy discovery, password editing/re-encryption, passkey
+creation/signing, CTAP/BLE transport,
+and third-party credential-provider integration remain unimplemented.
+
+Only original encrypted files can be exported. Their bytes and full recipient
+sets are preserved. No native Git synchronization exists; import and export are
+manual, and no repository push or pull runs on the device. The standalone
+encryption helper is excluded from the app bundle and requires explicit public
+recipients in tests. Enabling edits requires complete inherited `.gpg-id` policy
+resolution and access to every required public encryption key.
 
 ## Build
 
