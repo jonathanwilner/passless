@@ -26,6 +26,7 @@ in {
     services.udev.extraRules = ''
       KERNEL=="uhid", GROUP="passless", MODE="0660"
       SUBSYSTEM=="hidraw", KERNELS=="0003:15D9:0A37.*", TAG+="uaccess"
+      SUBSYSTEM=="hidraw", KERNELS=="0003:1050:0402.*", TAG+="uaccess"
     '';
   };
 }

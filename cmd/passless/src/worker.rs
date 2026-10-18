@@ -362,7 +362,9 @@ fn run_loop<E: HidEndpoint, H: CommandHandler>(
 
                         debug!("Worker sending {} response packets", batch_len);
                         for response_packet in &response_packets {
-                            if let Err(e) = endpoint.write_packet(response_packet.as_bytes()) {
+                            let mut response = *response_packet.as_bytes();
+                            crate::hid_capabilities::advertise_no_msg(&mut response);
+                            if let Err(e) = endpoint.write_packet(&response) {
                                 error!("Worker failed to write response packet: {}", e);
                                 if draining {
                                     break 'outer;

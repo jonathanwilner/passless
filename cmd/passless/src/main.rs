@@ -4,11 +4,13 @@ mod authenticator;
 mod commands;
 mod credential_backup;
 mod instance_lock;
+mod hid_capabilities;
 mod logging;
 mod notification;
 mod pin_storage;
 mod storage;
 mod util;
+mod usb_identity;
 mod worker;
 
 use passless_core::{
@@ -509,25 +511,13 @@ fn run() -> Result<()> {
 
             info!("Creating UHID device...");
 
-            #[cfg(debug_assertions)]
-            let (vendor_id, product_id) = {
-                let vendor_id = std::env::var("PASSLESS_TEST_VENDOR_ID").ok().and_then(|s| {
-                    let s = s.strip_prefix("0x").unwrap_or(&s);
-                    u16::from_str_radix(s, 16).ok()
-                });
-                let product_id = std::env::var("PASSLESS_TEST_PRODUCT_ID")
-                    .ok()
-                    .and_then(|s| {
-                        let s = s.strip_prefix("0x").unwrap_or(&s);
-                        u16::from_str_radix(s, 16).ok()
-                    });
-                (vendor_id, product_id)
-            };
-
-            #[cfg(not(debug_assertions))]
-            let (vendor_id, product_id) = (Some(0x15d9), Some(0x0a37));
-
-            let uhid = UhidDevice::create_fido_device_with_ids(None, vendor_id, product_id, None)
+            let identity = usb_identity::UsbIdentity::from_environment().map_err(Error::Config)?;
+            let uhid = UhidDevice::create_fido_device_with_ids(
+                Some(identity.name),
+                Some(identity.vendor),
+                Some(identity.product),
+                None,
+            )
                 .map_err(|e| Error::Uhid(format!("{:?}", e)))
                 .inspect_err(|_e| {
                     error!("Failed to create UHID device");
@@ -742,25 +732,13 @@ fn run() -> Result<()> {
 
         info!("Creating UHID device...");
 
-        #[cfg(debug_assertions)]
-        let (vendor_id, product_id) = {
-            let vendor_id = std::env::var("PASSLESS_TEST_VENDOR_ID").ok().and_then(|s| {
-                let s = s.strip_prefix("0x").unwrap_or(&s);
-                u16::from_str_radix(s, 16).ok()
-            });
-            let product_id = std::env::var("PASSLESS_TEST_PRODUCT_ID")
-                .ok()
-                .and_then(|s| {
-                    let s = s.strip_prefix("0x").unwrap_or(&s);
-                    u16::from_str_radix(s, 16).ok()
-                });
-            (vendor_id, product_id)
-        };
-
-        #[cfg(not(debug_assertions))]
-        let (vendor_id, product_id) = (Some(0x15d9), Some(0x0a37));
-
-        let uhid = UhidDevice::create_fido_device_with_ids(None, vendor_id, product_id, None)
+        let identity = usb_identity::UsbIdentity::from_environment().map_err(Error::Config)?;
+        let uhid = UhidDevice::create_fido_device_with_ids(
+            Some(identity.name),
+            Some(identity.vendor),
+            Some(identity.product),
+            None,
+        )
             .map_err(|e| Error::Uhid(format!("{:?}", e)))
             .inspect_err(|_e| {
                 error!("Failed to create UHID device");
