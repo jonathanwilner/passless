@@ -1,13 +1,15 @@
+import {generatePhoneKey} from './enrollment.mjs';
 import {GitHubStore} from './github.mjs';
 import {gitRequest,clearGit} from './git-bridge.mjs';
 import {unlockKey,decryptFile,encryptPreservingRecipients} from './crypto.mjs';
 import {credentialMetadata} from './credential.mjs';
 const el=id=>document.getElementById(id);
 let armored='', key=null, encrypted=null, timer, epoch=0, policy='', publicKeys='', passwordReady=false;
+let enrollment=null;
 const repository=new GitHubStore(gitRequest);let opened=null;
 const status=s=>{el('status').textContent=s;};
 function clearDisplay(){epoch++;passwordReady=false;el('secret').value='';el('details').textContent='';}
-function lock(){clearDisplay();clearGit();opened=null;repository.snapshot=null;el('token').value='';key=null;armored='';el('passphrase').value='';clearTimeout(timer);status('Locked. Import your OpenPGP secret key to unlock.');}
+function lock(){clearDisplay();clearGit();opened=null;repository.snapshot=null;el('token').value='';el('recovery-passphrase').value='';key=null;armored='';el('passphrase').value='';clearTimeout(timer);status('Locked. Import your OpenPGP secret key to unlock.');}
 function touch(){clearTimeout(timer);timer=setTimeout(lock,60000);}
 window.passlessReceive=async(kind,base64)=>{
  clearDisplay();
@@ -57,6 +59,13 @@ el('push').onclick=async()=>{
  finally{plain.fill(0);result?.fill(0);}
 };
 function exportBytes(data,name){let raw='';for(const b of data)raw+=String.fromCharCode(b);if(window.Passless)window.Passless.exportFile(name,btoa(raw));else status('Export requires the HarmonyOS shell.');}
+el('generate-key').onclick=async()=>{
+ const passphrase=el('recovery-passphrase').value;lock();enrollment=null;el('fingerprint').textContent='';const started=epoch;
+ try{const generated=await generatePhoneKey(passphrase);if(started!==epoch)return;enrollment=generated;el('fingerprint').textContent=`Phone public fingerprint: ${generated.fingerprint}`;status('Export both files. Import the encrypted recovery key to unlock. Enroll only the public key in the fleet.');}
+ catch{if(started===epoch)status('Key generation failed. Use a recovery passphrase of at least 16 characters.');}
+};
+el('export-public').onclick=()=>{if(enrollment)exportBytes(new TextEncoder().encode(enrollment.publicKey),'passless-phone-public.asc');else status('Generate a phone key first.');};
+el('export-recovery').onclick=()=>{if(enrollment)exportBytes(new TextEncoder().encode(enrollment.recoveryKey),'passless-phone-recovery.asc');else status('Generate a phone key first.');};
 el('export').onclick=()=>{if(encrypted)exportBytes(encrypted,'credential.gpg');else status('Import an encrypted file first.');};
 el('save').onclick=async()=>{
  if(!passwordReady||!key||!encrypted||!policy||!publicKeys){status('Import the effective .gpg-id policy and public keys, then decrypt a password before editing.');return;}

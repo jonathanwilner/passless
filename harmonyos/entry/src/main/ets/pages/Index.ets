@@ -51,7 +51,7 @@ class FileBridge {
     } catch { this.notice('Import failed. Choose a readable file under 1 MiB.'); }
   }
   exportFile(name: string, encoded: string): void {
-    if (this.busy || encoded.length > 1400000 || (name !== 'credential.gpg' && name !== 'updated-password.gpg')) return;
+    if (this.busy || encoded.length > 1400000 || (name !== 'credential.gpg' && name !== 'updated-password.gpg' && name !== 'passless-phone-public.asc' && name !== 'passless-phone-recovery.asc')) return;
     this.busy = true;
     this.saveSelection(name, encoded).finally(() => { this.busy = false; });
   }
@@ -77,7 +77,7 @@ class FileBridge {
         }
         fs.fsyncSync(file.fd);
       } finally { fs.closeSync(file); }
-      this.notice('Encrypted file exported.');
+      this.notice('File exported.');
     } catch { this.notice('Encrypted export failed.'); }
     finally { bytes.fill(0); }
   }

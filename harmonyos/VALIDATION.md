@@ -89,3 +89,20 @@ The SDK emits previewer ICU-file warnings, a module SemVer warning, duplicate
 resource-name warnings, and an ArkTS deprecated-context warning. Packaging
 succeeded. These warnings are preserved in the tracked build log and are not
 runtime proof.
+
+Phone enrollment follow-up: synthetic test checks encrypted recovery armor,
+wrong-passphrase refusal, matching public fingerprint and decrypting a message
+addressed to the new key. Lifecycle test checks background cancellation of
+pending generation and clearing the recovery passphrase. Device key generation
+and document-picker export still require physical acceptance.
+
+Monaco HDC connection attempts to both Pura X Max Tailscale peers
+`100.69.83.125:37091` and `100.96.211.107:37091` failed. HDC reported both
+TCP Offline with unknown identity. Installation cannot proceed until a live
+shell identifies the device and active user, followed by a matching bundle/device
+signing profile. No private fleet keys were transferred.
+
+Enrollment follow-up validation: all 25 host tests passed; DevEco API 26
+assembleHap succeeded. Artifact `build/passless-0.1.0-api26-enrollment-unsigned.hap`.
+Pura X Max peer `100.96.211.107` subsequently became online in Tailscale, but
+Monaco HDC connection still failed and a direct TCP check timed out on port 37091.
