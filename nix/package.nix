@@ -2,7 +2,13 @@
 rustPlatform.buildRustPackage {
   pname = "passless";
   version = "0.20.2";
-  src = lib.cleanSource ../.;
+  src = lib.fileset.toSource {
+    root = ../.;
+    fileset = lib.fileset.unions [
+      ../Cargo.toml ../Cargo.lock ../LICENSE ../README.md
+      ../cmd ../passless-core ../passless-config-doc ../passless-uhid ../tools
+    ];
+  };
   cargoLock.lockFile = ../Cargo.lock;
   nativeBuildInputs = [ pkg-config makeWrapper installShellFiles ];
   buildInputs = [ systemd ];
