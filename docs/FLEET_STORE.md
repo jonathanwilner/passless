@@ -18,8 +18,10 @@ encryption interoperability, not browser registration or login acceptance.
   authenticated GitHub `/meta` API.
 - Shared public recipient keys: `recipients/*.asc`; recipients: `.gpg-id`.
 
-Each host generates its own encryption key and repository deploy key. Private
-keys never enter Git or the Nix store and are never copied between hosts.
+Each host generates its own encryption key and repository deploy key. These
+host private keys never enter Git or the Nix store and are never copied between
+hosts. Passkey private keys are encrypted inside store entries and replicated
+through Git, so authorized hosts can use the same website credentials.
 Repository deploy keys grant access only to this private repository.
 The dedicated state directory and GnuPG home have mode 0700. Local private keys
 have no passphrase to support unattended synchronization and decryption. Host
