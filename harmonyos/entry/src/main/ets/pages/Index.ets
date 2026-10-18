@@ -1,3 +1,4 @@
+import { GitHubBridge } from './GitHubBridge';
 import webview from '@ohos.web.webview';
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
@@ -86,12 +87,14 @@ class FileBridge {
 struct Index {
   controller: webview.WebviewController = new webview.WebviewController();
   bridge: FileBridge = new FileBridge(this.controller, getContext(this) as common.UIAbilityContext);
+  github: GitHubBridge = new GitHubBridge(this.controller);
   aboutToAppear(): void {
     emitter.on({ eventId: 1001 }, () => {
+      this.github.clearSession();
       this.controller.runJavaScript('window.passlessLock && window.passlessLock()').catch(() => {});
     });
   }
-  aboutToDisappear(): void { emitter.off(1001); }
+  aboutToDisappear(): void { this.github.clearSession(); emitter.off(1001); }
   build() {
     Column() {
       Web({ src: $rawfile('web/index.html'), controller: this.controller })
@@ -100,6 +103,9 @@ struct Index {
         .databaseAccess(false)
         .fileAccess(false)
         .javaScriptProxy({ object: this.bridge, name: 'Passless', methodList: ['chooseFile', 'exportFile'], controller: this.controller })
+        .onControllerAttached(() => {
+          this.controller.registerJavaScriptProxy(this.github, 'PasslessGit', ['setSession', 'clearSession', 'request']);
+        })
         .onLoadIntercept((event) => {
           const url = event.data.getRequestUrl();
           return !(url.startsWith('resource://rawfile/') || url.startsWith('file:///data/storage/el1/bundle/entry/resources/rawfile/'));
