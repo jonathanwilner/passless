@@ -18,7 +18,7 @@ rustPlatform.buildRustPackage {
   postBuild = ''
     # A private bus and synthetic daemon exercise consent deadlines without
     # accessing a desktop session, hardware, or credential store.
-    ${dbus}/bin/dbus-run-session --dbus-daemon=${dbus}/bin/dbus-daemon -- cargo test --offline --locked --release \
+    ${dbus}/bin/dbus-run-session --dbus-daemon=${dbus}/bin/dbus-daemon --config-file=${dbus}/share/dbus-1/session.conf -- cargo test --offline --locked --release \
       -p passless-notification-tests -- --include-ignored
   '';
   postInstall = ''
