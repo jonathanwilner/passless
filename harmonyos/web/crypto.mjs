@@ -13,8 +13,9 @@ export async function decryptFile(ciphertext,key) {
   if(result.data.length>MAX_FILE){result.data.fill(0);throw Error('Decrypted file size limit');}
   return result.data;
 }
-export async function encryptFile(plaintext,key) {
+export async function encryptFile(plaintext,recipients) {
+  if(!Array.isArray(recipients)||recipients.length===0)throw Error('Explicit recipients required');
   if(plaintext.length>MAX_FILE)throw Error('Plaintext size limit');
   const message=await openpgp.createMessage({binary:plaintext});
-  return openpgp.encrypt({message,encryptionKeys:key.toPublic(),format:'binary',config});
+  return openpgp.encrypt({message,encryptionKeys:recipients,format:'binary',config});
 }

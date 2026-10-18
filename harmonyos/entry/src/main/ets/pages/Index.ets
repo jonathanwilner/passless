@@ -50,7 +50,7 @@ class FileBridge {
     } catch { this.notice('Import failed. Choose a readable file under 1 MiB.'); }
   }
   exportFile(name: string, encoded: string): void {
-    if (this.busy || encoded.length > 1400000 || (name !== 'password.gpg' && name !== 'credential.gpg')) return;
+    if (this.busy || encoded.length > 1400000 || name !== 'credential.gpg') return;
     this.busy = true;
     this.saveSelection(name, encoded).finally(() => { this.busy = false; });
   }
