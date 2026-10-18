@@ -2,13 +2,17 @@
 let
   cfg = config.services.passless;
   toml = pkgs.formats.toml { };
-  configuredPackage = if cfg.gnupgHome == null then cfg.package else pkgs.symlinkJoin {
+  environment = cfg.environment
+    // lib.optionalAttrs (cfg.gnupgHome != null) { GNUPGHOME = cfg.gnupgHome; }
+    // { PASSLESS_INTERACTION_MODE = "desktop"; };
+  wrapperArgs = lib.escapeShellArgs (lib.concatLists (lib.mapAttrsToList (name: value: [ "--set" name value ]) environment));
+  configuredPackage = pkgs.symlinkJoin {
     name = "passless-user";
     paths = [ cfg.package ];
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
-      wrapProgram $out/bin/passless --set GNUPGHOME ${lib.escapeShellArg cfg.gnupgHome}
-      wrapProgram $out/bin/passless-git-sync --set GNUPGHOME ${lib.escapeShellArg cfg.gnupgHome}
+      wrapProgram $out/bin/passless ${wrapperArgs}
+      wrapProgram $out/bin/passless-git-sync ${wrapperArgs}
     '';
   };
 in {
@@ -18,6 +22,12 @@ in {
       type = lib.types.package;
       default = pkgs.callPackage ./package.nix { };
       description = "Passless package.";
+    };
+    environment = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      example = { GIT_SSH_COMMAND = "ssh -i /home/alice/.local/share/passless/store-sync -o IdentitiesOnly=yes -o BatchMode=yes"; };
+      description = "Public environment shared by the CLI and service. Use absolute paths, not systemd specifiers. Desktop confirmation remains required.";
     };
     gnupgHome = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -70,8 +80,7 @@ in {
           done
         ''));
 
-        Environment = [ "PASSLESS_INTERACTION_MODE=desktop" ]
-          ++ lib.optional (cfg.gnupgHome != null) "GNUPGHOME=${cfg.gnupgHome}";
+        Environment = lib.mapAttrsToList (name: value: "${name}=${value}") environment;
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";
