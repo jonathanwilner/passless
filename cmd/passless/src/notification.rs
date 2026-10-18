@@ -3,7 +3,9 @@
 //! This module provides desktop notification support with compatibility for
 //! different notification servers (notify-osd, mako, Dunst, etc.).
 
-use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use futures_lite::{StreamExt, future};
 
 use log::{debug, info, warn};
 use notify_rust::{Notification, Timeout, Urgency};
@@ -88,9 +90,7 @@ fn action_mode_for_server(
     let server_name = server_name.to_lowercase();
 
     match (server_name.as_str(), server_version) {
-        ("notify-osd", "1.0") | ("mako", "0.0.0") | ("quickshell", "") => {
-            NotificationActionMode::Default
-        }
+        ("notify-osd", "1.0") | ("mako", "0.0.0") => NotificationActionMode::Default,
         ("dunst", _) if prompt_kind == PromptKind::UserPresence => {
             NotificationActionMode::DunstDefault
         }
@@ -99,17 +99,38 @@ fn action_mode_for_server(
 }
 
 fn notification_action_mode(prompt_kind: PromptKind) -> NotificationActionMode {
-    notify_rust::get_server_information()
-        .map(|server| {
-            let mode = action_mode_for_server(&server.name, &server.version, prompt_kind);
-            debug!(
-                "Notification server: {} (version: {})",
-                server.name, server.version
-            );
+    // Discovery must also terminate if the notification server is unresponsive.
+    let server: Result<(String, String, String, String), String> = future::block_on(future::race(
+        async {
+            let connection = zbus::Connection::session()
+                .await
+                .map_err(|e| e.to_string())?;
+            let proxy = zbus::Proxy::new(
+                &connection,
+                "org.freedesktop.Notifications",
+                "/org/freedesktop/Notifications",
+                "org.freedesktop.Notifications",
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            proxy
+                .call("GetServerInformation", &())
+                .await
+                .map_err(|e| e.to_string())
+        },
+        async {
+            async_io::Timer::after(Duration::from_secs(2)).await;
+            Err("notification server discovery timed out".to_string())
+        },
+    ));
+    server
+        .map(|(name, _vendor, version, _spec)| {
+            let mode = action_mode_for_server(&name, &version, prompt_kind);
+            debug!("Notification server: {} (version: {})", name, version);
 
             match mode {
                 NotificationActionMode::Default => {
-                    info!("Detected {} - using default action mode", server.name);
+                    info!("Detected {} - using default action mode", name);
                 }
                 NotificationActionMode::DunstDefault => {
                     info!("Detected Dunst - using UP-specific default action mode");
@@ -137,6 +158,77 @@ fn action_is_accepted(
     action == "default" && action_mode.uses_default_action()
 }
 
+/// Own the subscription and cancel it at a local monotonic deadline. Desktop
+/// servers may ignore expire_timeout for critical notifications. No detached
+/// waiter survives expiry, and a late queued click cannot authorize a request.
+fn wait_for_notification(notification: &Notification, timeout: Duration) -> Result<String, String> {
+    future::block_on(async {
+        let deadline = Instant::now() + timeout.min(Duration::from_secs(300));
+        let mut handle = None;
+        let result = future::race(
+            async {
+                let connection = zbus::Connection::session()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let proxy = zbus::Proxy::new(
+                    &connection,
+                    "org.freedesktop.Notifications",
+                    "/org/freedesktop/Notifications",
+                    "org.freedesktop.Notifications",
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                // Subscribe before Notify so even an immediate response is queued.
+                // Proxy signals are filtered to this service owner and object path.
+                let mut signals = proxy
+                    .receive_all_signals()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                handle = Some(notification.show_async().await.map_err(|e| e.to_string())?);
+                let id = handle.as_ref().unwrap().id();
+                while let Some(message) = signals.next().await {
+                    if Instant::now() >= deadline {
+                        break;
+                    }
+                    match message.header().member().map(|name| name.as_str()) {
+                        Some("ActionInvoked") => {
+                            if let Ok((nid, action)) = message.body().deserialize::<(u32, String)>()
+                            {
+                                if nid == id && Instant::now() < deadline {
+                                    return Ok(action);
+                                }
+                            }
+                        }
+                        Some("NotificationClosed") => {
+                            if let Ok((nid, _)) = message.body().deserialize::<(u32, u32)>() {
+                                if nid == id {
+                                    break;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Ok("__closed".to_string())
+            },
+            async {
+                async_io::Timer::at(deadline).await;
+                Ok("__closed".to_string())
+            },
+        )
+        .await;
+        // Closing is best effort and bounded too: some broken servers never
+        // reply or emit NotificationClosed. Dropping the wait removed its stream.
+        if let Some(handle) = handle {
+            future::race(handle.close_async(), async {
+                async_io::Timer::after(Duration::from_millis(200)).await;
+            })
+            .await;
+        }
+        result
+    })
+}
+
 fn show_confirmation_notification(
     operation: &str,
     relying_party: Option<&str>,
@@ -154,6 +246,10 @@ fn show_confirmation_notification(
             relying_party.unwrap_or("<unknown>")
         );
         return Ok(NotificationResult::Accepted);
+    }
+
+    if timeout_seconds == 0 {
+        return Ok(NotificationResult::Denied);
     }
 
     let action_mode = notification_action_mode(prompt_kind);
@@ -181,15 +277,14 @@ fn show_confirmation_notification(
 
     info!("Showing {} notification", summary);
 
-    let action_result = Arc::new(Mutex::new(None));
-    let action_result_clone = action_result.clone();
-
     let mut notification = Notification::new();
     notification
         .summary(summary)
         .body(&message)
         .icon("security-high")
-        .timeout(Timeout::Milliseconds(timeout_seconds * 1000))
+        .timeout(Timeout::Milliseconds(
+            timeout_seconds.saturating_mul(1000).min(i32::MAX as u32),
+        ))
         .urgency(Urgency::Critical);
 
     if action_mode.uses_default_action() {
@@ -199,23 +294,10 @@ fn show_confirmation_notification(
         notification.action("deny", "Deny");
     }
 
-    let handle = notification
-        .show()
-        .map_err(|e| format!("Failed to show notification: {}", e))?;
-
-    handle.wait_for_action(|action| {
-        debug!("User action received: {}", action);
-        let mut result = action_result_clone
-            .lock()
-            .expect("Failed to lock action result");
-        *result = Some(action.to_string());
-    });
-
-    let action = action_result
-        .lock()
-        .expect("Failed to lock action result")
-        .clone()
-        .unwrap_or_else(|| "__closed".to_string());
+    let action = wait_for_notification(
+        &notification,
+        Duration::from_secs(u64::from(timeout_seconds)),
+    )?;
 
     if action_is_accepted(&action, "approve", action_mode) {
         info!("Notification accepted");
@@ -283,15 +365,12 @@ pub fn show_yes_no_notification(title: &str, question: &str) -> Result<YesNoResu
 
     let action_mode = notification_action_mode(PromptKind::YesNo);
 
-    let action_result = Arc::new(Mutex::new(None));
-    let action_result_clone = action_result.clone();
-
     let mut notification = Notification::new();
     notification
         .summary(title)
         .body(question)
         .icon("dialog-question")
-        .timeout(Timeout::Never)
+        .timeout(Timeout::Milliseconds(60_000))
         .urgency(Urgency::Critical);
 
     if action_mode.uses_default_action() {
@@ -301,23 +380,7 @@ pub fn show_yes_no_notification(title: &str, question: &str) -> Result<YesNoResu
         notification.action("no", "No");
     }
 
-    let handle = notification
-        .show()
-        .map_err(|e| format!("Failed to show notification: {}", e))?;
-
-    handle.wait_for_action(|action| {
-        debug!("User action received: {}", action);
-        let mut result = action_result_clone
-            .lock()
-            .expect("Failed to lock action result");
-        *result = Some(action.to_string());
-    });
-
-    let action = action_result
-        .lock()
-        .expect("Failed to lock action result")
-        .clone()
-        .unwrap_or_else(|| "__closed".to_string());
+    let action = wait_for_notification(&notification, Duration::from_secs(60))?;
 
     if action_is_accepted(&action, "yes", action_mode) {
         info!("User answered yes");
@@ -444,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_legacy_default_action_servers_are_preserved() {
-        for (name, version) in [("notify-osd", "1.0"), ("mako", "0.0.0"), ("quickshell", "")] {
+        for (name, version) in [("notify-osd", "1.0"), ("mako", "0.0.0")] {
             for prompt_kind in [
                 PromptKind::UserPresence,
                 PromptKind::UserVerification,
@@ -453,6 +516,22 @@ mod tests {
                 assert_eq!(
                     action_mode_for_server(name, version, prompt_kind),
                     NotificationActionMode::Default
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_quickshell_requires_explicit_actions() {
+        for kind in [
+            PromptKind::UserPresence,
+            PromptKind::UserVerification,
+            PromptKind::YesNo,
+        ] {
+            for version in ["", "0.2.1"] {
+                assert_eq!(
+                    action_mode_for_server("quickshell", version, kind),
+                    NotificationActionMode::Explicit
                 );
             }
         }
@@ -503,5 +582,113 @@ mod tests {
     #[test]
     fn test_notification_action_mode_doesnt_panic() {
         let _ = notification_action_mode(PromptKind::UserPresence);
+    }
+}
+
+#[cfg(test)]
+mod deadline_tests {
+    use super::*;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicU32, Ordering},
+    };
+
+    struct FakeNotifications {
+        action: Arc<Mutex<Option<String>>>,
+        next_id: AtomicU32,
+    }
+
+    #[zbus::interface(name = "org.freedesktop.Notifications")]
+    impl FakeNotifications {
+        #[allow(clippy::too_many_arguments)]
+        async fn notify(
+            &self,
+            _app: &str,
+            _replaces: u32,
+            _icon: &str,
+            _summary: &str,
+            _body: &str,
+            _actions: Vec<String>,
+            _hints: std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
+            _expire_timeout: i32,
+            #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+        ) -> u32 {
+            let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+            let action = self.action.lock().unwrap().clone();
+            if let Some(action) = action {
+                if action == "stale" {
+                    Self::action_invoked(&emitter, id - 1, "approve")
+                        .await
+                        .unwrap();
+                } else {
+                    Self::action_invoked(&emitter, id, &action).await.unwrap();
+                }
+            }
+            id
+        }
+
+        // Intentionally ignore both expiry and CloseNotification: no close signal.
+        fn close_notification(&self, _id: u32) {}
+
+        #[zbus(signal)]
+        async fn action_invoked(
+            emitter: &zbus::object_server::SignalEmitter<'_>,
+            id: u32,
+            action: &str,
+        ) -> zbus::Result<()>;
+    }
+
+    /// Run under dbus-run-session: no production notifications or credentials.
+    #[test]
+    #[ignore = "requires a private bus: dbus-run-session -- notification-tests --include-ignored"]
+    fn silent_server_deadline_and_explicit_actions() {
+        let action = Arc::new(Mutex::new(None));
+        let _server = future::block_on(async {
+            zbus::connection::Builder::session()
+                .unwrap()
+                .name("org.freedesktop.Notifications")
+                .unwrap()
+                .serve_at(
+                    "/org/freedesktop/Notifications",
+                    FakeNotifications {
+                        action: action.clone(),
+                        next_id: AtomicU32::new(1),
+                    },
+                )
+                .unwrap()
+                .build()
+                .await
+                .unwrap()
+        });
+        let notification = Notification::new()
+            .summary("Synthetic consent regression")
+            .action("approve", "Accept")
+            .action("deny", "Deny")
+            .timeout(Timeout::Never)
+            .finalize();
+        let start = Instant::now();
+        assert_eq!(
+            wait_for_notification(&notification, Duration::from_millis(100)).unwrap(),
+            "__closed"
+        );
+        assert!(start.elapsed() < Duration::from_secs(2));
+        // Emit the expired request's approval while the next request is
+        // subscribed. Its different ID must be ignored until local expiry.
+        *action.lock().unwrap() = Some("stale".to_string());
+        assert_eq!(
+            wait_for_notification(&notification, Duration::from_millis(100)).unwrap(),
+            "__closed"
+        );
+        for value in ["deny", "approve", "yes", "no"] {
+            *action.lock().unwrap() = Some(value.to_string());
+            assert_eq!(
+                wait_for_notification(&notification, Duration::from_secs(2)).unwrap(),
+                value
+            );
+        }
+        assert_eq!(
+            wait_for_notification(&notification, Duration::ZERO).unwrap(),
+            "__closed"
+        );
     }
 }

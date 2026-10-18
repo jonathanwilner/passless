@@ -231,7 +231,7 @@ pub struct SecurityConfig {
     #[default(true)]
     pub user_verification_authentication: bool,
 
-    /// Notification timeout in seconds (0 = no timeout)
+    /// Notification timeout in seconds (maximum 300; 0 denies immediately)
     #[arg(
         long = "notification-timeout",
         env = "PASSLESS_NOTIFICATION_TIMEOUT",

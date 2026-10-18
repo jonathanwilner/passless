@@ -1,4 +1,4 @@
-{ lib, rustPlatform, pkg-config, systemd, makeWrapper, installShellFiles, gnupg, git, openssh }:
+{ lib, rustPlatform, pkg-config, systemd, makeWrapper, installShellFiles, dbus, gnupg, git, openssh }:
 rustPlatform.buildRustPackage {
   pname = "passless";
   version = "0.20.2";
@@ -10,11 +10,17 @@ rustPlatform.buildRustPackage {
     ];
   };
   cargoLock.lockFile = ../Cargo.lock;
-  nativeBuildInputs = [ pkg-config makeWrapper installShellFiles ];
+  nativeBuildInputs = [ pkg-config makeWrapper installShellFiles dbus ];
   buildInputs = [ systemd ];
   cargoBuildFlags = [ "-p" "passless-rs" ];
   # Unit tests only. Hardware and user-interaction tests require a separate live session.
   cargoTestFlags = [ "-p" "passless-core" "-p" "passless-config-doc" ];
+  postBuild = ''
+    # A private bus and synthetic daemon exercise consent deadlines without
+    # accessing a desktop session, hardware, or credential store.
+    ${dbus}/bin/dbus-run-session --dbus-daemon=${dbus}/bin/dbus-daemon -- cargo test --offline --locked --release \
+      -p passless-notification-tests -- --include-ignored
+  '';
   postInstall = ''
     wrapProgram $out/bin/passless --prefix PATH : ${lib.makeBinPath [ gnupg git openssh ]}
     wrapProgram $out/bin/passless-git-sync --prefix PATH : ${lib.makeBinPath [ gnupg git openssh ]}
