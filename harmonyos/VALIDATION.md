@@ -2,7 +2,7 @@
 
 ## Passed
 
-- Host suite: 12 tests, 12 passed, 0 failed.
+- Host suite: 14 tests, 14 passed, 0 failed.
 - Two upstream Android Password Store binary CBOR fixtures decode correctly.
 - Canonical and legacy backup-state formats pass; conflicting states fail.
 - GnuPG decrypts this companion's OpenPGP ciphertext; the companion decrypts
@@ -21,27 +21,28 @@
 
 Tracked sessions:
 
-- `test-passless-harmony-recipient-final`
-- `build-passless-harmony-readonly`
+- `test-passless-harmony-policy-final`
+- `build-passless-harmony-policy`
 
 Dashboard: https://nix.thewilners.com/dashboard.html
 Both commands run from Armstrong; the build invokes the Monaco toolchain over
 SSH. Their published logs therefore appear under `machines/armstrong/`.
 
 Unsigned HAP (ignored build output):
-`build/passless-0.1.0-api26-readonly-unsigned.hap`
+`build/passless-0.1.0-api26-policy-unsigned.hap`
 
 SHA-256:
-`b3b2d6b0309d316a23b3e198a090ee761c21fe24b757c662e7d1f3fed571327d`
+`a28cc4fd3cd52be07f96f443b9da10710a07e81914ba5a1b0c797a4de00726c3`
 
 ## Recipient-policy followup
 
-Password text is read-only. The app does not import the complete inherited
-`.gpg-id` policy, so editing and re-encryption are disabled. The native bridge
-accepts only original encrypted credential exports. Tests verify byte-preserving
-export, explicit multi-recipient encryption in the standalone helper, and
-clearing/invalidation of prior plaintext on file/key import and inspection.
-The helper is not called by the app. There is no native Git sync.
+Password editing requires an explicit effective `.gpg-id` policy and public
+keys. The tests verify three original recipients retain exact encryption key
+IDs, a fourth policy recipient can decrypt, and omitted recipients, missing
+keys, private-key bundles, invalid policy forms and hidden recipients fail.
+Original ciphertext export remains byte-preserving. A lock during encryption
+prevents export and wipes generated buffers. Imports and inspection clear prior
+plaintext and invalidate pending operations. There is no native Git sync.
 
 ## Device and acceptance gates still open
 

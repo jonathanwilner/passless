@@ -18,7 +18,7 @@ class FileBridge {
     this.controller.runJavaScript(`window.passlessNotice(${JSON.stringify(message)})`).catch(() => {});
   }
   chooseFile(kind: string): void {
-    if (this.busy || (kind !== 'key' && kind !== 'credential')) return;
+    if (this.busy || (kind !== 'key' && kind !== 'credential' && kind !== 'policy' && kind !== 'public')) return;
     this.busy = true;
     this.readSelection(kind).finally(() => { this.busy = false; });
   }
@@ -50,7 +50,7 @@ class FileBridge {
     } catch { this.notice('Import failed. Choose a readable file under 1 MiB.'); }
   }
   exportFile(name: string, encoded: string): void {
-    if (this.busy || encoded.length > 1400000 || name !== 'credential.gpg') return;
+    if (this.busy || encoded.length > 1400000 || (name !== 'credential.gpg' && name !== 'updated-password.gpg')) return;
     this.busy = true;
     this.saveSelection(name, encoded).finally(() => { this.busy = false; });
   }
