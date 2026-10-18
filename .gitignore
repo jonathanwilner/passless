@@ -32,3 +32,7 @@ tools/agent-uhid-feasibility/controlled-rp/node_modules/
 tools/agent-uhid-feasibility/evidence/*.json
 .playwright-mcp
 .debug/
+
+# Nix build output links
+/result
+/result-*
