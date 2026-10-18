@@ -10,9 +10,10 @@ It reads the portable CBOR schema used by Android Password Store
 - Import an ASCII-armored OpenPGP secret key through the system document picker.
   Unlock the key with its passphrase in memory.
 - Import a binary OpenPGP `.gpg` credential produced by `pass`, APS, or Passless.
-- Decrypt password text for read-only inspection in memory. Password editing
-  and re-encryption are disabled because the app cannot verify the complete
-  recipient list from the store's `.gpg-id` files.
+- Decrypt and edit password text in memory. Import the effective `.gpg-id`
+  policy and an armored bundle of recipient public keys before edited export.
+  Every original encryption key ID must resolve uniquely to a policy key.
+  Export preserves those exact key IDs and includes all additional policy keys.
 - Decrypt passkey CBOR and show relying-party ID, user name, signature counter,
   and backup state. Private key scalars are never rendered.
 - Export the original encrypted credential without decoding or rewriting it.
@@ -38,16 +39,21 @@ This is a development preview, not hardware-backed key custody.
 
 Only import secret keys on a device you intend to trust. HUKS wrapping,
 biometric unlock, secure clipboard behavior, a persistent encrypted vault, Git
-sync, recipient-policy discovery, password editing/re-encryption, passkey
+sync, recipient-policy discovery, passkey
 creation/signing, CTAP/BLE transport,
 and third-party credential-provider integration remain unimplemented.
 
-Only original encrypted files can be exported. Their bytes and full recipient
-sets are preserved. No native Git synchronization exists; import and export are
-manual, and no repository push or pull runs on the device. The standalone
-encryption helper is excluded from the app bundle and requires explicit public
-recipients in tests. Enabling edits requires complete inherited `.gpg-id` policy
-resolution and access to every required public encryption key.
+Original encrypted exports preserve bytes. Edited passwords export to
+`updated-password.gpg`; the imported ciphertext remains unchanged. Policies
+accept only full primary fingerprints, one per line, plus blank/comment lines.
+Hidden recipients, missing/ambiguous keys, private-key bundles, and unsupported
+GnuPG policy forms fail closed. The user must select the effective policy for
+that password: automatic inherited `.gpg-id` discovery is pending. Original
+recipients cannot be removed by supplying an incomplete policy.
+
+No native Git synchronization exists. Import/export are manual; the app performs
+no repository push or pull. See `GIT-SYNC.md` for the implementation path and
+remaining engineering and device acceptance work.
 
 ## Build
 

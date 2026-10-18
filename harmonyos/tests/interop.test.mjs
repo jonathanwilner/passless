@@ -63,3 +63,22 @@ test('encryption helper requires explicit recipients and preserves both recipien
  const cipher=await encryptFile(plain,[first.publicKey,second.publicKey]);
  assert.deepEqual(await decryptFile(cipher,first.privateKey),plain);assert.deepEqual(await decryptFile(cipher,second.privateKey),plain);
 });
+test('strict policy preserves three fleet recipients and adds a fourth',async()=>{
+ const {encryptPreservingRecipients}=await import('../web/crypto.mjs');
+ const keys=await Promise.all(['A','B','C','D'].map(name=>openpgp.generateKey({type:'ecc',curve:'curve25519Legacy',userIDs:[{name:'Synthetic host '+name}],format:'object'})));
+ const plain=new TextEncoder().encode('original'), edited=new TextEncoder().encode('edited');
+ const original=await encryptFile(plain,keys.slice(0,3).map(k=>k.publicKey));
+ const policy=keys.map(k=>k.publicKey.getFingerprint()).join('\n');
+ const bundle=keys.map(k=>k.publicKey.armor()).join('\n');
+ const result=await encryptPreservingRecipients(edited,original,policy,bundle);
+ for(const k of keys)assert.deepEqual(await decryptFile(result,k.privateKey),edited);
+ const before=(await openpgp.readMessage({binaryMessage:original})).getEncryptionKeyIDs().map(x=>x.toHex());
+ const after=(await openpgp.readMessage({binaryMessage:result})).getEncryptionKeyIDs().map(x=>x.toHex());
+ for(const id of before)assert.ok(after.includes(id));
+ await assert.rejects(encryptPreservingRecipients(edited,original,policy.split('\n').slice(1).join('\n'),bundle));
+ await assert.rejects(encryptPreservingRecipients(edited,original,policy,keys.slice(1).map(k=>k.publicKey.armor()).join('\n')));
+ await assert.rejects(encryptPreservingRecipients(edited,original,'host@example.invalid',bundle));
+ await assert.rejects(encryptPreservingRecipients(edited,original,policy,bundle+keys[0].privateKey.armor()));
+ const hidden=await openpgp.encrypt({message:await openpgp.createMessage({binary:plain}),encryptionKeys:keys[0].publicKey,wildcard:true,format:'binary'});
+ await assert.rejects(encryptPreservingRecipients(edited,hidden,policy,bundle));
+});
