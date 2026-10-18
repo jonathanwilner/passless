@@ -1,0 +1,84 @@
+{ config, lib, pkgs, ... }:
+let
+  cfg = config.services.passless;
+  toml = pkgs.formats.toml { };
+  configuredPackage = if cfg.gnupgHome == null then cfg.package else pkgs.symlinkJoin {
+    name = "passless-user";
+    paths = [ cfg.package ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/passless --set GNUPGHOME ${lib.escapeShellArg cfg.gnupgHome}
+      wrapProgram $out/bin/passless-git-sync --set GNUPGHOME ${lib.escapeShellArg cfg.gnupgHome}
+    '';
+  };
+in {
+  options.services.passless = {
+    enable = lib.mkEnableOption "Passless desktop authenticator";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.callPackage ./package.nix { };
+      description = "Passless package.";
+    };
+    gnupgHome = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/home/alice/.local/share/passless/gnupg";
+      description = "Dedicated GPG home for both the user service and Passless CLI. Existing keys must be provisioned separately.";
+    };
+    settings = lib.mkOption {
+      type = toml.type;
+      default = { };
+      description = "Public TOML configuration. Never place credentials or private keys here: this file enters the Nix store.";
+    };
+  };
+  config = lib.mkIf cfg.enable {
+    assertions = [ {
+      assertion = pkgs.stdenv.hostPlatform.isLinux;
+      message = "Passless requires Linux UHID.";
+    } ];
+    home.packages = [ configuredPackage ];
+    services.passless.settings = {
+      backend_type = lib.mkDefault "pass";
+      pass = {
+        store_path = lib.mkDefault "${config.home.homeDirectory}/.password-store";
+        path = lib.mkDefault "fido2";
+        gpg_backend = lib.mkDefault "gnupg-bin";
+        git_sync = lib.mkDefault false;
+      };
+    };
+    xdg.configFile."passless/config.toml".source = toml.generate "passless.toml" cfg.settings;
+    systemd.user.services.passless = {
+      Unit = {
+        Description = "Passless FIDO2 software authenticator";
+        Documentation = "https://github.com/pando85/passless";
+        After = [ "graphical-session.target" ];
+        
+        PartOf = [ "graphical-session.target" ];
+      };
+      Service = {
+        ExecStart = "${configuredPackage}/bin/passless";
+        # Match password-store's nearest recipient policy, including scoped stores.
+        ExecCondition = lib.mkIf (cfg.settings.backend_type == "pass") (toString (pkgs.writeShellScript "passless-store-ready" ''
+          store=${lib.escapeShellArg cfg.settings.pass.store_path}
+          path=${lib.escapeShellArg "${cfg.settings.pass.store_path}/${cfg.settings.pass.path}"}
+          while true; do
+            [ ! -r "$path/.gpg-id" ] || exit 0
+            [ "$path" != "$store" ] || exit 1
+            parent=$(${pkgs.coreutils}/bin/dirname "$path")
+            [ "$parent" != "$path" ] || exit 1
+            path=$parent
+          done
+        ''));
+
+        Environment = [ "PASSLESS_INTERACTION_MODE=desktop" ]
+          ++ lib.optional (cfg.gnupgHome != null) "GNUPGHOME=${cfg.gnupgHome}";
+        Restart = "on-failure";
+        RestartSec = 5;
+        UMask = "0077";
+        LimitCORE = 0;
+        LimitMEMLOCK = "2M";
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+    };
+  };
+}
