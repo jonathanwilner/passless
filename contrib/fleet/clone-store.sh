@@ -7,7 +7,7 @@ state="${XDG_DATA_HOME:-$HOME/.local/share}/passless"
 remote="${1:?Pass the private Git repository SSH URL}"
 test -s "$state/known_hosts"
 test -f "$state/store-sync"
-export GIT_SSH_COMMAND="ssh -i $state/store-sync -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$state/known_hosts"
+export GIT_SSH_COMMAND="ssh -i $state/store-sync -o IdentitiesOnly=yes -o BatchMode=yes -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$state/known_hosts"
 if [[ ! -d "$state/password-store/.git" ]]; then
   git clone "$remote" "$state/password-store"
 fi
