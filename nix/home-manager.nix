@@ -5,6 +5,10 @@ let
   environment = cfg.environment
     // lib.optionalAttrs (cfg.gnupgHome != null) { GNUPGHOME = cfg.gnupgHome; }
     // { PASSLESS_INTERACTION_MODE = "desktop"; };
+  # systemd parses each Environment directive as words and expands % specifiers.
+  quoteEnvironment = value: "\"" + lib.replaceStrings
+    [ "\\" "\"" "\n" "\r" "\t" "%" ]
+    [ "\\\\" "\\\"" "\\n" "\\r" "\\t" "%%" ] value + "\"";
   wrapperArgs = lib.escapeShellArgs (lib.concatLists (lib.mapAttrsToList (name: value: [ "--set" name value ]) environment));
   configuredPackage = pkgs.symlinkJoin {
     name = "passless-user";
@@ -80,7 +84,7 @@ in {
           done
         ''));
 
-        Environment = lib.mapAttrsToList (name: value: "${name}=${value}") environment;
+        Environment = lib.mapAttrsToList (name: value: quoteEnvironment "${name}=${value}") environment;
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";
