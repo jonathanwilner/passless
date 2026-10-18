@@ -118,3 +118,14 @@ Source reference: `pando85/Android-Password-Store` commit
 `7dc489ec57c9c19e5373fe602aba21f8069b5eff`, particularly
 `passkeys/core/.../model/StoredCredential.kt` and `passkeys/CREDENTIAL_FORMAT.md`.
 See `NOTICE.md` for fixture and library attribution.
+
+Phone enrollment: generate a separate OpenPGP key in the app with a recovery
+passphrase of at least 16 characters. Export `passless-phone-public.asc` for
+fleet enrollment and `passless-phone-recovery.asc` to a user-chosen recovery
+location. The latter contains only passphrase-encrypted secret key armor.
+Import that recovery file to unlock each session. Public and encrypted recovery
+armor remain in memory across lock so both exports can use the system picker;
+plaintext key state and passphrase inputs are cleared. Closing the app loses
+unexported enrollment material. Compare the displayed public fingerprint before
+adding the public key to the store policy. Re-encrypt entries for the expanded
+policy on a trusted fleet host. Never copy a fleet host's private key to the phone.
