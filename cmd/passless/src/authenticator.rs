@@ -1629,7 +1629,11 @@ impl<
             );
         }
         result?;
-        crate::attestation::rewrite_make_credential(request, response_buffer);
+        match request.first() {
+            Some(&0x01) => crate::attestation::rewrite_make_credential(request, response_buffer),
+            Some(&0x04) => crate::fido_profile::patch_get_info(response_buffer),
+            _ => {}
+        }
         Ok(())
     }
 

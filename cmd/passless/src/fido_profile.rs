@@ -115,6 +115,52 @@ pub(crate) fn credential_backup_state(configured_eligible: bool) -> CredentialBa
     }
 }
 
+
+/// Advertise hmac-secret for the YubiKey profile.
+///
+/// soft-fido2 implements the extension for discoverable credentials but its
+/// GetInfo filter currently exposes only credProtect. Relying parties such as
+/// ChatGPT request WebAuthn PRF only when hmac-secret is advertised, so add it
+/// to the extension list for this profile.
+pub(crate) fn patch_get_info(response: &mut Vec<u8>) {
+    if current() != FidoProfile::YubiKey5Nfc || response.first() != Some(&0x00) {
+        return;
+    }
+    let Ok(ciborium::Value::Map(mut entries)) =
+        ciborium::from_reader::<ciborium::Value, _>(&response[1..])
+    else {
+        return;
+    };
+    let mut extensions_found = false;
+    for (key, value) in entries.iter_mut() {
+        if matches!(key, ciborium::Value::Integer(integer) if i128::from(*integer) == 0x02)
+            && let ciborium::Value::Array(extensions) = value
+        {
+            if !extensions
+                .iter()
+                .any(|item| matches!(item, ciborium::Value::Text(text) if text == "hmac-secret"))
+            {
+                extensions.push(ciborium::Value::Text("hmac-secret".into()));
+            }
+            extensions_found = true;
+        }
+    }
+    if !extensions_found {
+        if let Ok(key) = 0x02i128.try_into() {
+            entries.push((
+                ciborium::Value::Integer(key),
+                ciborium::Value::Array(vec![ciborium::Value::Text("hmac-secret".into())]),
+            ));
+        }
+    }
+    let mut encoded = Vec::new();
+    if ciborium::into_writer(&ciborium::Value::Map(entries), &mut encoded).is_ok() {
+        response.clear();
+        response.push(0x00);
+        response.extend_from_slice(&encoded);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,5 +207,17 @@ mod tests {
     fn unknown_profiles_fail_explicitly() {
         assert!(FidoProfile::from_name("yubikey-9").is_err());
         assert!(FidoProfile::from_name("").is_err());
+    }
+
+    #[test]
+    fn get_info_patch_is_a_noop_for_the_passless_profile() {
+        if current() == FidoProfile::YubiKey5Nfc {
+            return;
+        }
+        let mut response = vec![0x00, 0xa1, 0x02, 0x81, 0x6b];
+        response.extend_from_slice(b"credProtect");
+        let original = response.clone();
+        patch_get_info(&mut response);
+        assert_eq!(response, original);
     }
 }
