@@ -132,17 +132,36 @@ pub(crate) fn patch_get_info(response: &mut Vec<u8>) {
         return;
     };
     let mut extensions_found = false;
+    let mut formats_found = false;
     for (key, value) in entries.iter_mut() {
-        if matches!(key, ciborium::Value::Integer(integer) if i128::from(*integer) == 0x02)
-            && let ciborium::Value::Array(extensions) = value
-        {
-            if !extensions
-                .iter()
-                .any(|item| matches!(item, ciborium::Value::Text(text) if text == "hmac-secret"))
-            {
-                extensions.push(ciborium::Value::Text("hmac-secret".into()));
+        let Some(integer) = (match key {
+            ciborium::Value::Integer(integer) => Some(i128::from(*integer)),
+            _ => None,
+        }) else {
+            continue;
+        };
+        match integer {
+            0x01 => {
+                if let ciborium::Value::Array(versions) = value
+                    && !versions
+                        .iter()
+                        .any(|item| matches!(item, ciborium::Value::Text(text) if text == "FIDO_2_1"))
+                {
+                    versions.push(ciborium::Value::Text("FIDO_2_1".into()));
+                }
             }
-            extensions_found = true;
+            0x02 => {
+                if let ciborium::Value::Array(extensions) = value {
+                    if !extensions.iter().any(
+                        |item| matches!(item, ciborium::Value::Text(text) if text == "hmac-secret"),
+                    ) {
+                        extensions.push(ciborium::Value::Text("hmac-secret".into()));
+                    }
+                    extensions_found = true;
+                }
+            }
+            0x16 => formats_found = true,
+            _ => {}
         }
     }
     if !extensions_found {
@@ -150,6 +169,14 @@ pub(crate) fn patch_get_info(response: &mut Vec<u8>) {
             entries.push((
                 ciborium::Value::Integer(key),
                 ciborium::Value::Array(vec![ciborium::Value::Text("hmac-secret".into())]),
+            ));
+        }
+    }
+    if !formats_found {
+        if let Ok(key) = 0x16i128.try_into() {
+            entries.push((
+                ciborium::Value::Integer(key),
+                ciborium::Value::Array(vec![ciborium::Value::Text("packed".into())]),
             ));
         }
     }
