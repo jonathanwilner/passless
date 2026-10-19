@@ -25,7 +25,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::{debug, error, info, warn};
 
-static VERSION: LazyLock<u32> = LazyLock::new(|| {
+pub(crate) static VERSION: LazyLock<u32> = LazyLock::new(|| {
     let major = env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(0);
     let minor = env!("CARGO_PKG_VERSION_MINOR").parse().unwrap_or(0);
     let patch = env!("CARGO_PKG_VERSION_PATCH").parse().unwrap_or(0);
@@ -692,10 +692,7 @@ impl<S: CredentialStorage + 'static, P: PinStorage + 'static>
             };
 
             let config = AuthenticatorConfig::builder()
-                .aaguid([
-                    0x66, 0x69, 0x64, 0x6F, 0x2E, 0x70, 0x61, 0x73, 0x73, 0x6C, 0x65, 0x73, 0x73,
-                    0x2E, 0x72, 0x73,
-                ])
+                .aaguid(crate::fido_profile::aaguid())
                 .options(options)
                 .commands(vec![
                     CtapCommand::MakeCredential,
@@ -707,13 +704,11 @@ impl<S: CredentialStorage + 'static, P: PinStorage + 'static>
                 ])
                 .max_credentials(100)
                 .extensions(vec!["credProtect".to_string()])
-                .firmware_version(*VERSION)
+                .firmware_version(crate::fido_profile::firmware_version())
                 .constant_sign_count(security_config.constant_signature_counter)
-                .default_credential_backup_state(if security_config.enable_credential_backup {
-                    CredentialBackupState::Eligible
-                } else {
-                    CredentialBackupState::NotEligible
-                })
+                .default_credential_backup_state(crate::fido_profile::credential_backup_state(
+                    security_config.enable_credential_backup,
+                ))
                 .algorithms(vec![-7])
                 .max_pin_retries(pin_config.max_retries)
                 .auto_lock_timeout(pin_config.auto_lock_timeout)
@@ -806,11 +801,7 @@ impl<S: CredentialStorage + 'static, P: PinStorage + 'static>
         };
 
         let config = AuthenticatorConfig::builder()
-            .aaguid([
-                // "fido.passless.rs"
-                0x66, 0x69, 0x64, 0x6F, 0x2E, 0x70, 0x61, 0x73, 0x73, 0x6C, 0x65, 0x73, 0x73, 0x2E,
-                0x72, 0x73,
-            ])
+            .aaguid(crate::fido_profile::aaguid())
             .options(options)
             .commands(vec![
                 CtapCommand::MakeCredential,
@@ -822,7 +813,7 @@ impl<S: CredentialStorage + 'static, P: PinStorage + 'static>
             ])
             .max_credentials(100)
             .extensions(vec!["credProtect".to_string()])
-            .firmware_version(*VERSION)
+            .firmware_version(crate::fido_profile::firmware_version())
             .constant_sign_count(security_config.constant_signature_counter)
             .default_credential_backup_state(CredentialBackupState::NotEligible)
             .algorithms(vec![-7])
@@ -987,10 +978,7 @@ impl<
             };
 
             let config = AuthenticatorConfig::builder()
-                .aaguid([
-                    0x66, 0x69, 0x64, 0x6F, 0x2E, 0x70, 0x61, 0x73, 0x73, 0x6C, 0x65, 0x73, 0x73,
-                    0x2E, 0x72, 0x73,
-                ])
+                .aaguid(crate::fido_profile::aaguid())
                 .options(options)
                 .commands(vec![
                     CtapCommand::MakeCredential,
@@ -1002,13 +990,11 @@ impl<
                 ])
                 .max_credentials(100)
                 .extensions(vec!["credProtect".to_string()])
-                .firmware_version(*VERSION)
+                .firmware_version(crate::fido_profile::firmware_version())
                 .constant_sign_count(security_config.constant_signature_counter)
-                .default_credential_backup_state(if security_config.enable_credential_backup {
-                    CredentialBackupState::Eligible
-                } else {
-                    CredentialBackupState::NotEligible
-                })
+                .default_credential_backup_state(crate::fido_profile::credential_backup_state(
+                    security_config.enable_credential_backup,
+                ))
                 .algorithms(vec![-7])
                 .max_pin_retries(pin_config.max_retries)
                 .auto_lock_timeout(pin_config.auto_lock_timeout)
@@ -1084,10 +1070,7 @@ impl<
         };
 
         let config = AuthenticatorConfig::builder()
-            .aaguid([
-                0x66, 0x69, 0x64, 0x6F, 0x2E, 0x70, 0x61, 0x73, 0x73, 0x6C, 0x65, 0x73, 0x73, 0x2E,
-                0x72, 0x73,
-            ])
+            .aaguid(crate::fido_profile::aaguid())
             .options(options)
             .commands(vec![
                 CtapCommand::MakeCredential,
@@ -1099,7 +1082,7 @@ impl<
             ])
             .max_credentials(100)
             .extensions(vec!["credProtect".to_string()])
-            .firmware_version(*VERSION)
+            .firmware_version(crate::fido_profile::firmware_version())
             .constant_sign_count(security_config.constant_signature_counter)
             .default_credential_backup_state(CredentialBackupState::NotEligible)
             .algorithms(vec![-7])
@@ -1646,6 +1629,7 @@ impl<
             );
         }
         result?;
+        crate::attestation::rewrite_make_credential(request, response_buffer);
         Ok(())
     }
 

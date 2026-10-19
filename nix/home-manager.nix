@@ -4,7 +4,11 @@ let
   toml = pkgs.formats.toml { };
   environment = cfg.environment
     // lib.optionalAttrs (cfg.gnupgHome != null) { GNUPGHOME = cfg.gnupgHome; }
-    // { PASSLESS_INTERACTION_MODE = "desktop"; PASSLESS_USB_IDENTITY = cfg.usbIdentity; };
+    // {
+      PASSLESS_INTERACTION_MODE = "desktop";
+      PASSLESS_USB_IDENTITY = cfg.usbIdentity;
+      PASSLESS_FIDO_PROFILE = cfg.fidoProfile;
+    };
   # systemd parses each Environment directive as words and expands % specifiers.
   quoteEnvironment = value: "\"" + lib.replaceStrings
     [ "\\" "\"" "\n" "\r" "\t" "%" ]
@@ -30,7 +34,12 @@ in {
     usbIdentity = lib.mkOption {
       type = lib.types.enum [ "passless" "yubikey-fido" ];
       default = "passless";
-      description = "Host HID identity profile. yubikey-fido changes the USB VID/PID and name only; Passless AAGUID, attestation and confirmation remain unchanged.";
+      description = "Host HID identity profile. yubikey-fido changes the USB VID/PID and name only; the CTAP identity is controlled by fidoProfile.";
+    };
+    fidoProfile = lib.mkOption {
+      type = lib.types.enum [ "passless" "yubikey-5-nfc" ];
+      default = "passless";
+      description = "Host-visible CTAP identity. yubikey-5-nfc reports the published YubiKey 5 NFC AAGUID and firmware version so relying parties classify Passless as hardware. It does not create a Yubico attestation signature.";
     };
     environment = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;

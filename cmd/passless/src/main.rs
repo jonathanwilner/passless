@@ -1,8 +1,10 @@
 #[cfg(feature = "agent")]
 pub mod agent;
 mod authenticator;
+mod attestation;
 mod commands;
 mod credential_backup;
+mod fido_profile;
 mod instance_lock;
 mod hid_capabilities;
 mod logging;
@@ -434,6 +436,17 @@ fn run() -> Result<()> {
         log::LevelFilter::Info
     };
     logging::init(log_level);
+
+    // Validate the host-visible FIDO identity before any UHID device exists.
+    let fido_profile = fido_profile::from_environment().map_err(|message| {
+        error!("{}", message);
+        Error::Config(message)
+    })?;
+    info!(
+        "FIDO identity profile: {} (AAGUID {})",
+        fido_profile.name(),
+        hex::encode(fido_profile.aaguid())
+    );
 
     // Load config: CLI args + config file + defaults (CLI takes precedence)
     let config = AppConfig::load(&mut args).inspect_err(|e| {

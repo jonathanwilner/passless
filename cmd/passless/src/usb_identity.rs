@@ -31,7 +31,9 @@ impl UsbIdentity {
     pub fn from_environment() -> Result<Self, String> {
         let profile = match std::env::var("PASSLESS_USB_IDENTITY") {
             Ok(profile) => profile,
-            Err(std::env::VarError::NotPresent) => "passless".into(),
+            Err(std::env::VarError::NotPresent) => {
+                crate::fido_profile::current().default_usb_identity().into()
+            }
             Err(e) => return Err(format!("invalid PASSLESS_USB_IDENTITY: {e}")),
         };
         let identity = Self::from_profile(&profile)?;

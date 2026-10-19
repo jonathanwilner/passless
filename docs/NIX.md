@@ -121,24 +121,51 @@ deletion, or PIN changes can diverge. Resolve conflicts explicitly and inspect
 service logs before assuming all hosts have the latest credential state. Avoid
 concurrent mutations of the same credential across offline hosts.
 
-### Optional YubiKey-compatible host HID identity
+### YubiKey identity profiles
 
-Set `services.passless.usbIdentity = "yubikey-fido";` in Home Manager, or set
-`PASSLESS_USB_IDENTITY=yubikey-fido` when launching directly. Restart Passless to
-recreate the HID device. The default `passless` profile retains its original
-identity. Both daemon creation paths use the selected profile. Debug builds
-continue to honor `PASSLESS_TEST_VENDOR_ID` and `PASSLESS_TEST_PRODUCT_ID`.
+Two independent settings control how Passless appears to the host and to
+relying parties:
 
-The optional profile advertises VID `1050`, PID `0402`, and name `YubiKey FIDO`,
-matching [Yubico's documented FIDO-only USB identity](https://docs.yubico.com/yesdk/users-manual/yubikey-reference/transports/overview.html).
-This is a software compatibility profile. It changes host HID enumeration only.
-Passless keeps its AAGUID, attestation, encrypted credentials, and desktop
-confirmation. Websites receive WebAuthn authenticator data and attestation;
-this setting does not establish genuine YubiKey hardware or hardware-backed keys.
-YubiKey OTP, smart-card, management interfaces, and vendor commands are not added.
-The upstream transport notes that some browsers apply Yubico-specific U2F behavior,
-and Passless currently rejects CTAP1/U2F MSG commands. The shared HID worker
-sets the NMSG capability bit in valid INIT replies to advertise this limitation
-accurately (the upstream transport hardcodes CBOR without NMSG). Clients that select U2F
-will fail with this profile. Test registration and assertion in the target
-browser before relying on this profile. Restore `usbIdentity = "passless"` and restart to undo the host identity.
+- `services.passless.usbIdentity` controls the USB descriptors. The default is
+  `passless` (VID `15d9`, PID `0a37`, name `Virtual FIDO2 Authenticator`).
+  `yubikey-fido` uses Yubico's documented FIDO-only identity: VID `1050`, PID
+  `0402`, name `YubiKey FIDO`.
+- `services.passless.fidoProfile` controls the CTAP identity and attestation.
+  The default is `passless`, which keeps the `fido.passless.rs` AAGUID, the
+  Passless firmware version, and a `none` attestation statement.
+  `yubikey-5-nfc` reports the published YubiKey 5 Series with NFC firmware 5.8
+  AAGUID (`f4ce5fc0-57d3-46f5-a736-efb7d5bc63b5`), firmware version `0x050800`,
+  `BE=0` in authenticator data, and a `packed` attestation statement.
+
+For the closest YubiKey presentation, set both:
+
+```nix
+services.passless = {
+  usbIdentity = "yubikey-fido";
+  fidoProfile = "yubikey-5-nfc";
+};
+```
+
+Restart Passless after changing either setting so the HID device and CTAP
+identity are recreated. The equivalent environment variables are
+`PASSLESS_USB_IDENTITY` and `PASSLESS_FIDO_PROFILE`. Debug builds continue to
+honor `PASSLESS_TEST_VENDOR_ID` and `PASSLESS_TEST_PRODUCT_ID`.
+
+The YubiKey profile is an emulation, not a YubiKey:
+
+- The attestation key and certificate are synthetic. The certificate has a
+  Yubico-like subject and the correct AAGUID extension, but it is self-signed
+  and does not chain to a Yubico attestation root. A verifier that validates
+  the attestation chain will not accept it as genuine hardware.
+- The profile reports `BE=0` even when credential backup is enabled so the
+  credential looks device-bound rather than synced.
+- `hmac-secret`/PRF, `largeBlob`, `credBlob`, and FIDO 2.1 are not implemented.
+  `authenticatorGetInfo` still reports `FIDO_2_0` and `credProtect` only.
+- YubiKey OTP, smart-card, management interfaces, and vendor commands are not
+  added.
+
+Relying parties that classify authenticators from FIDO metadata may label the
+credential as a YubiKey or a security key. Policies that require a genuine
+hardware attestation chain can still reject it. Test the target service before
+relying on this profile. Restore `fidoProfile = "passless"` and
+`usbIdentity = "passless"`, then restart, to return to the original identity.
