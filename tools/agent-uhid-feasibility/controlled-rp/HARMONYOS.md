@@ -71,7 +71,7 @@ OpenHarmony build `7.0.0.105`, API26. HuaweiBrowser 5.1.9.315, ArkWeb7.0.0.105.
 Secure localhost context and WebAuthn present. Platform authenticator availability
 false; conditional mediation true; getClientCapabilities returned `{}`.
 A user-clicked registration returned NotAllowedError immediately. No credential
-was registered or authenticated. Physical-device support remains untested.
+was registered or authenticated. Physical-device results follow below.
 
 Monaco emulator: OpenHarmony7.0.0.105 API26. Host loopback server reachable;
 browser launch succeeded but no probe report arrived during the initial run.
@@ -94,7 +94,8 @@ Absence in these audited APIs is not proof that Huawei has no private/future API
 
 Native follow-up should call the first two methods and serialize Map entries
 explicitly. Preserve device-type error801 and service-connection error1021300011.
-A native probe has not been built or run in this change. The browser result does
+A native probe has now been built under `tools/harmony-native-probe`; real-device
+installation awaits its dedicated signing profile. The browser result does
 not substitute for that native test. One shared Passless credential across all
 three operating systems remains unproven until the acceptance sequence succeeds.
 
@@ -111,7 +112,7 @@ LAP-AL10 at the user-provided wireless-debug address, HarmonyOS
   credentialBackedUp=false. This describes the returned WebAuthn flags, not an
   independent audit of Huawei storage or backup behavior.
 - Initial authentication returned NotAllowedError. The user saw a PIN prompt
-  and a timeout in the log. No authentication signature has yet been verified.
+  and a timeout in the log. No localhost authentication signature was verified.
 - Extended the browser lab operation timeout to three minutes for manual PIN
   entry. Server challenges already expire after five minutes.
 - HDC commands subsequently stalled although the TCP debugging port remained
