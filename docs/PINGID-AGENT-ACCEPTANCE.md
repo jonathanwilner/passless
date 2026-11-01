@@ -26,3 +26,9 @@ These findings come from live DOM/configuration and loaded JavaScript inspection
 6. Test renewal, cancellation, expiry and revocation on Goran before fleet rollout. Existing token validity is not evidence of successful passkey automation.
 
 The user was asked to complete the existing passkey ceremony in the dedicated test tab. No existing tabs were closed, no logout occurred, and no production configuration was changed. The request may expire while awaiting user interaction; restart a bounded ceremony if needed.
+
+## Existing credential confirmation
+
+The user confirmed successful sign-in using the existing passkey. The dedicated tab subsequently reached Microsoft's `/common/wrongplace` page. This diagnostic request intentionally had no code-exchange consumer, so that landing page is not itself a failed PingID ceremony. No raw assertion or server logs were collected; user confirmation plus callback navigation is the acceptance evidence for the existing credential, not for Passless.
+
+A second authorization request reused the newly established federation session and returned without a fresh passkey prompt. The earlier HP enrollment-link page could not be restored from browser history because it required form resubmission. The user was asked to open the authenticated HP passkey enrollment/device-management page. Registration policy and agent credential acceptance remain unknown. No new credential was registered.
