@@ -111,6 +111,12 @@ The daemon launches a managed browser with the Passless MV3 extension. A MAIN-wo
 
 For cross-origin frames, Passless only takes the autonomous path when browser Permissions Policy delegation can be verified. Otherwise the request remains on the native browser path.
 
+### Platform availability discovery
+
+In managed browsers, `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` preserves a true native-browser result. Otherwise it asks the daemon through the authenticated extension connection. The daemon advertises its software provider only for an active browser-bound grant whose RP scope matches the browser-reported HTTPS origin and whose authentication policy allows agent-derived UP and UV. Denied, revoked, expired, unavailable or cross-origin-frame probes fail closed. This reports agent-derived verification capability, not human biometrics or hardware attestation.
+
+The read-only `/capabilities` probe does not create credentials, sign challenges or consume the ceremony operation budget. Every subsequent create/get operation still performs its own full authorization and verification checks. Discovery has a three-second timeout and does not enable conditional passkey autofill.
+
 ## CDP and browser automation
 
 CDP is full browser-session authority. Exposing CDP over a loopback port makes integration with Playwright and other browser automation convenient, but a process that obtains that endpoint can act throughout the authenticated managed-browser session even though credential private keys remain in the daemon.

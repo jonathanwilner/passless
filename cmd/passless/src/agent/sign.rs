@@ -327,6 +327,10 @@ struct RequestBudget {
 }
 
 impl RequestBudget {
+    fn available(&self) -> bool {
+        self.inner.lock().is_ok_and(|inner| inner.used.len() < self.max_requests)
+    }
+
     fn claim(&self, body: &[u8]) -> RequestClaim {
         let hash = Sha256::digest(body);
         let mut digest = [0u8; 32];
@@ -1085,7 +1089,8 @@ fn handle_http_connection(
                 return Ok(());
             }
         };
-        let available = entry.handler.platform_available(&entry.context, &request);
+        let available = entry.request_budget.available()
+            && entry.handler.platform_available(&entry.context, &request);
         let response = serde_json::json!({"capabilities": {"user_verifying_platform_authenticator": available}});
         send_sign_response(&mut stream, "200 OK", Some(response.to_string().as_bytes()));
         return Ok(());
@@ -4276,6 +4281,27 @@ mod tests {
         }
 
         #[test]
+        fn capabilities_require_agent_verification_and_allowed_policy() {
+            let f = TestFixture::new(true);
+            let handler = f.make_handler();
+            let mut ctx = f.make_ctx();
+            let mut request = CapabilityRequest {
+                origin: "https://example.com".into(),
+                top_origin: "https://example.com".into(),
+                cross_origin: false,
+            };
+            assert!(handler.platform_available(&ctx, &request));
+            ctx.profile_config.rules[0].authenticate.user_verification = passless_core::agent::UserVerificationSource::Human;
+            assert!(!handler.platform_available(&ctx, &request));
+            ctx = f.make_ctx();
+            ctx.profile_config.rules[0].authenticate.authorization = passless_core::agent::AgentAuthorization::Deny;
+            assert!(!handler.platform_available(&ctx, &request));
+            ctx = f.make_ctx();
+            request.cross_origin = true;
+            assert!(!handler.platform_available(&ctx, &request));
+        }
+
+        #[test]
         fn http_capabilities_checks_origin_expiry_and_bearer_without_spending_budget() {
             let (shutdown, _dir, sock_path, registry, token, f, handle) = setup_bound(true);
             let probe = |origin: &str, token: &str| {
@@ -4283,7 +4309,7 @@ mod tests {
                 let req = format_sign_request(token, body.as_bytes()).replace("POST /sign ", "POST /capabilities ");
                 http_request(&sock_path, &req, body.as_bytes())
             };
-            for _ in 0..20 {
+            for _ in 0..70 {
                 assert!(probe("https://login.example.com", &token).contains("user_verifying_platform_authenticator\":true"));
             }
             assert!(probe("https://evil.com", &token).contains("user_verifying_platform_authenticator\":false"));
