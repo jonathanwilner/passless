@@ -193,3 +193,14 @@ Native authentication failed before a prompt with error 1021300003 in 241 ms.
 The specific service log is `Fido2Client: checkRpInAppLink fail`. This identifies
 an app-to-RP association check as the current boundary. No native assertion or
 shared Passless credential has yet been verified.
+
+### Remaining association gate
+
+The CN developer portal reports real-name verification rejected and directs the
+account owner to Huawei's overseas developer site. The installed debug app has
+appIdentifier `6918746563381217948`. Complete the account and app/domain setup
+before retrying native authentication. A disabled-by-default Nix association
+module is prepared on `nixos-amd` branch `test/harmony-passkey-association`,
+commit `6842f7c4`; it has passed syntax validation but is not deployed.
+The separate HTTPS diagnostic server was stopped after collecting evidence.
+The synthetic phone credentials remain; no production credentials were changed.
