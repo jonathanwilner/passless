@@ -205,7 +205,7 @@ mod tests {
         // The profile is read from the environment once per process. This test
         // is meaningful in a process that selected the YubiKey profile; the
         // helper is exercised directly above for the default profile.
-        if FidoProfile::current() != FidoProfile::YubiKey5Nfc {
+        if crate::fido_profile::current() != FidoProfile::YubiKey5Nfc {
             return;
         }
         let mut response = response_with_auth_data(b"auth-data");
