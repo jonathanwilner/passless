@@ -94,3 +94,17 @@ Live PingID evidence from DOM and browser API inspection:
 After this bounded test, the runtime systemd override was removed and the original Home Manager Passless service was restored and confirmed active. The temporary AppArmor profile was unloaded. Candidate outputs, configuration and audit data remain available for further development. The normal Chrome enrollment tab remains available.
 
 Next implementation: add a read-only, authenticated provider-capability query through the extension broker and native daemon. Derive availability from the live lease, origin/RP policy and supported user-verification mode; preserve native availability and return false on unavailable/expired agent sessions. Do not hard-code a global true result or describe agent-derived verification as a human biometric. Test native fallback, expired sessions, denied origins and allowed profiles before rebuilding. Then repeat one-use enrollment and server-verified authentication, bind production access to the resulting HP credential, disable registration, and only then integrate teams-cli renewal.
+
+## Provider discovery fix, 1 Nov 2026
+
+Commit `0e88338` includes the managed Chrome provider discovery fix and its tests. The extension preserves native platform availability and otherwise queries the daemon through the authenticated native-messaging channel. The daemon checks the live grant, trusted browser origin, policy, audit health and remaining operation budget. Discovery neither signs an assertion nor consumes the signing budget. Agent-derived verification remains distinct from human biometric verification.
+
+Validation:
+
+- 68 extension behavioral tests passed, including native fallback, timeout, iframe denial and trusted-origin forwarding.
+- 118 agent signing tests passed, including denied policy, human-only verification, expired/revoked grants and repeated discovery without consuming signing authority.
+- The opt-in ARM64 Nix package built successfully on Goran. Output: `/nix/store/barxahhlmgvxysna833pnbvjzc8h1fzp-passless-0.20.2`.
+- The canonical dashboard manifest records `test-passless-capabilities-js` on Armstrong and `build-passless-discovery-fixed` on Goran with exit code 0. An unauthenticated public manifest request returned HTTP 403; publication was verified in Armstrong's served manifest.
+- In the live managed Chromium, the installed availability shim returned **true** at `https://authenticator.pingone.com` and **false** at `https://example.com`, which is outside the profile's RP policy.
+
+The candidate was temporarily activated using the runtime override documented above. The earlier normal-Chrome enrollment tab had been closed. Direct entry to PingID device management returned an invalid-session error. A fresh HP federation request completed using existing authentication state, but did not create a new PingID device-management session. The user was asked to reopen the authenticated Add a New Device screen. Enrollment and server-accepted Passless authentication remain pending; no registration grant or new PingID credential was created by these checks.
