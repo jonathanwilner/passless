@@ -7,23 +7,25 @@ The final build completed in 13.9 seconds. The build is tracked as
 This establishes SDK API/type compatibility; it does not establish runtime
 support.
 
-## Signing blocker
+## Signing and installation
 
-Huawei developer login completed after user approval. The authenticated CN
-account differs from the international developer account that issued the
-existing certificate valid through 17 Oct 2027. The CN account lists one
-expired certificate: `xiaobai-debug-zeroport-20260926`, expired 11 Oct 2026.
+Huawei CN certificate creation initially failed with error `205389872`,
+`certificate number exceeds limit`. After explicit user approval, the exact
+expired certificate `xiaobai-debug-zeroport-20260926` was matched by name,
+type, and expiry (11 Oct 2026 00:36:49 UTC). Its full metadata was saved locally
+before retiring that certificate only. No other certificate or profile changed.
 
-The phone's UDID was registered under the dedicated name
-`PasslessNativeProbeUltimate20261101`. Creating `Passless Native Probe 20261101`
-failed with Huawei error `205389872`:
-`[AppGalleryConnectProvisionService]certificate number exceeds limit.`
+The dedicated `Passless Native Probe 20261101` certificate and single-device
+profile were then issued for `com.thewilners.passless.probe` and registered target
+`PasslessNativeProbeUltimate20261101`. The certificate expires 15 Nov 2026.
+The HAP was signed, signature verification passed, and installation on the
+physical device succeeded. Keys, authorization data, certificate metadata,
+and the UDID remain outside this repository.
 
-No existing certificate was revoked or replaced. No existing profile was
-changed. No dedicated probe profile was issued, and no probe HAP was installed.
-Continue with the international developer account that owns the valid
-certificate, or explicitly authorize retiring the expired CN certificate.
-Keys, authorization data, and the UDID remain outside this repository.
+Signed HAP SHA-256:
+`fb8fc4f54ed7d3189ba371c73646ce7ebd60c71714f2a1781bac7894d0a8e879`.
+Signing was tracked as `sign-harmony-native-probe` with exit status zero.
+The first launch returned `10106102` because the phone screen was locked.
 
 Real-device native capabilities, native registration, native origin, and
 server-verified native authentication remain pending. Separately, the browser
