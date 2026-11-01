@@ -148,11 +148,11 @@
         completeRequest(requestId, { ok: false, type: type, error: "invalid_daemon_response" });
         return;
       }
-      if (!payload || typeof payload !== "object" || !payload[responseField]) {
+      if (!payload || typeof payload !== "object" || (responseField && !payload[responseField])) {
         completeRequest(requestId, { ok: false, type: type, error: "invalid_daemon_response" });
         return;
       }
-      completeRequest(requestId, { ok: true, response: payload[responseField], type: type });
+      completeRequest(requestId, { ok: true, response: responseField ? payload[responseField] : payload, type: type });
     });
     return true;
   }
@@ -183,7 +183,7 @@
       pub_key_cred_params: req.pub_key_cred_params,
       user_verification: req.user_verification,
       cross_origin: origins.cross_origin
-    }, sendResponse, "create_attestation_result", "create");
+    }, sendResponse, null, "create");
   }
 
   chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {

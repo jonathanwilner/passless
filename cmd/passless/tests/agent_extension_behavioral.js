@@ -1953,6 +1953,21 @@ test("worker capability probe uses trusted origins and rejects injected origin",
   assert.strictEqual(s._nativeMessageCalls.length, 1);
 });
 
+test("worker registration accepts the daemon's flat credential response", function() {
+  const s = runWorkerTest("/tmp/sock", "token");
+  const sender = {id:"test-extension-id", url:"https://example.com/path", frameId:0, tab:{url:"https://example.com/path"}};
+  const responses = [];
+  s._listeners[0]({source:"passless-agent-broker", request_id:"create-flat", type:"create", request:{
+    rp_id:"example.com", challenge_b64u:"YWJj", user_id_b64u:"dXNlcg", user_name:"test", exclude_credentials:[], pub_key_cred_params:[-7], user_verification:true
+  }}, sender, r=>responses.push(r));
+  assert.strictEqual(s._nativeMessageCalls[0].message.path, "/register");
+  const credential = {credential_id_b64u:"Y3JlZA", public_key_algorithm:-7, authenticator_data_b64u:"YXV0aA", attestation_object_b64u:"YXR0", client_data_json_b64u:"anNvbg"};
+  s._nativeMessageCalls[0].callback({body:JSON.stringify(credential)});
+  assert.strictEqual(responses[0].ok, true);
+  assert.strictEqual(responses[0].type, "create");
+  assert.strictEqual(JSON.stringify(responses[0].response), JSON.stringify(credential));
+});
+
 // ======================== REPORT ========================
 
 (async function() {
