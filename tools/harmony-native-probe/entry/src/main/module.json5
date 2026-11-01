@@ -11,7 +11,11 @@
     ],
     "deliveryWithInstall": true,
     "installationFree": false,
-    "requestPermissions": [{ "name": "ohos.permission.INTERNET" }],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      }
+    ],
     "pages": "$profile:main_pages",
     "abilities": [
       {
@@ -31,6 +35,22 @@
             "actions": [
               "ohos.want.action.home"
             ]
+          },
+          {
+            "entities": [
+              "entity.system.browsable"
+            ],
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "https",
+                "host": "tv.thewilners.com",
+                "pathStartWith": "passless-native-probe"
+              }
+            ],
+            "domainVerify": true
           }
         ]
       }
