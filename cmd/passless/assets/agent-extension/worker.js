@@ -205,6 +205,16 @@
       return false;
     }
 
+    if (message.type === "capabilities") {
+      // Use browser-supplied origins, never values supplied by the page.
+      if (origins.cross_origin || Object.keys(message.request).length !== 0) {
+        sendResponse({ ok: false, type: "capabilities", error: "invalid_origin" });
+        return false;
+      }
+      return daemonRequest(message.request_id, "/capabilities", origins,
+        sendResponse, "capabilities", "capabilities");
+    }
+
     var req = message.request;
     var messageType = message.type === "create" ? "create" : "get";
     if (messageType === "create") {

@@ -292,7 +292,9 @@
     }
 
     try {
-      operation.resolve(message.type === "create"
+      operation.resolve(operation.type === "capabilities"
+        ? Boolean(message.response && message.response.user_verifying_platform_authenticator === true)
+        : message.type === "create"
         ? credentialFromCreate(message.response)
         : credentialFrom(message.response));
     } catch (error) {
@@ -310,6 +312,7 @@
       var id = requestId();
       var timeout = timeoutFor(options.publicKey);
       var operation = {
+        type: type,
         resolve: resolve,
         reject: reject,
         native: nativeOperation,
@@ -336,6 +339,19 @@
         type: type
       }, location.origin);
     });
+  }
+
+  if (typeof PublicKeyCredential !== "undefined" &&
+      typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === "function") {
+    var nativeAvailable = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable.bind(PublicKeyCredential);
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async function() {
+      // Keep native providers available even when the agent is offline or denied.
+      try { if (await nativeAvailable()) return true; } catch (error) {}
+      if (window.top !== window.self || !policyAllowsWebAuthn("publickey-credentials-get")) return false;
+      try {
+        return await runOperation("capabilities", { publicKey: { timeout: 3000 } }, {}, null);
+      } catch (error) { return false; }
+    };
   }
 
   credentials.get = function(options) {

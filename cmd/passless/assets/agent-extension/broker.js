@@ -70,8 +70,8 @@
       !message.request
     ) return;
 
-    var messageType = message.type === "create" ? "create" : "get";
-    var valid = messageType === "create"
+    var messageType = message.type === "capabilities" ? "capabilities" : (message.type === "create" ? "create" : "get");
+    var valid = messageType === "capabilities" ? Object.keys(message.request).length === 0 : messageType === "create"
       ? isValidCreateRequest(message.request)
       : isValidGetRequest(message.request);
     if (!valid) return;

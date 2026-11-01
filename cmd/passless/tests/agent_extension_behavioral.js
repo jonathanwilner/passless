@@ -142,6 +142,8 @@ function runMainTest(channel, setupFn) {
   sandbox.NaN = NaN;
   sandbox.Infinity = Infinity;
 
+  sandbox.PublicKeyCredential = { isUserVerifyingPlatformAuthenticatorAvailable: () => Promise.resolve(Boolean(sandbox._nativeAvailable)) };
+  sandbox._windowListeners = windowListeners;
   const ctx = vm.createContext(sandbox);
   const code = renderMain(channel);
   vm.runInContext(code, ctx);
@@ -1902,6 +1904,53 @@ test("uv: broker rejects numeric user_verification", async function() {
     );
   });
   assert.strictEqual(sandbox._chromeSendMessage, undefined);
+});
+
+test("availability preserves native provider without contacting agent", async function() {
+  const s = runMainTest("cap"); s._nativeAvailable = true;
+  assert.strictEqual(await s.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(), true);
+  assert.strictEqual(s._postMessageCalls.length, 0);
+});
+
+test("availability resolves agent capability and fails closed on timeout", async function() {
+  for (const answer of [true, false, "timeout"]) {
+    const s = runMainTest("cap");
+    const p = s.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    await flushPromises();
+    const request = s._postMessageCalls[0].data;
+    assert.strictEqual(request.type, "capabilities");
+    if (answer === "timeout") s._setTimeoutCalls[0].fn();
+    else simulateMessage(s._windowListeners.message, {
+      source: "passless-agent-broker", channel: "cap", id: request.id,
+      type: "capabilities", ok: true,
+      response: { user_verifying_platform_authenticator: answer }
+    }, s.window);
+    assert.strictEqual(await p, answer === true);
+  }
+});
+
+test("availability does not advertise agent in cross-origin frame", async function() {
+  const s = runMainTest("cap"); s.window.top = {}; s.window.self = s.window;
+  assert.strictEqual(await s.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(), false);
+  assert.strictEqual(s._postMessageCalls.length, 0);
+});
+
+test("broker forwards empty capability requests", function() {
+  const s = runBrokerTest("cap");
+  simulateMessage(s._windowListeners.message, {source:"passless-agent-main", channel:"cap", id:"c1", type:"capabilities", request:{}}, s.window);
+  assert.strictEqual(s._chromeSendMessage.type, "capabilities");
+});
+
+test("worker capability probe uses trusted origins and rejects injected origin", function() {
+  const s = runWorkerTest("/tmp/sock", "token");
+  const sender = {id:"test-extension-id", url:"https://example.com/path", frameId:0, tab:{url:"https://example.com/path"}};
+  const request = {source:"passless-agent-broker", request_id:"cap-1", type:"capabilities", request:{}};
+  s._listeners[0](request, sender, ()=>{});
+  assert.strictEqual(s._nativeMessageCalls[0].message.path, "/capabilities");
+  assert.strictEqual(JSON.parse(s._nativeMessageCalls[0].message.body).origin, "https://example.com");
+  request.request = {origin:"https://evil.example"};
+  s._listeners[0](request, sender, ()=>{});
+  assert.strictEqual(s._nativeMessageCalls.length, 1);
 });
 
 // ======================== REPORT ========================

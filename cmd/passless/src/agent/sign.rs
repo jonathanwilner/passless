@@ -865,7 +865,7 @@ fn handle_http_connection(
     let mut parts = request_line.split_whitespace();
     let method = parts.next().ok_or("no method")?;
     let path = parts.next().ok_or("no path")?;
-    if method != "POST" || (path != "/sign" && path != "/register") {
+    if method != "POST" || (path != "/sign" && path != "/register" && path != "/capabilities") {
         send_http_error(&mut stream, "404 Not Found", "not_found");
         return Ok(());
     }
@@ -1077,6 +1077,19 @@ fn handle_http_connection(
         send_sign_error(&mut stream, "413 Payload Too Large", "body_too_large");
         return Ok(());
     }
+    if path == "/capabilities" {
+        let request: CapabilityRequest = match serde_json::from_slice(&body) {
+            Ok(request) => request,
+            Err(_) => {
+                send_sign_error(&mut stream, "400 Bad Request", "invalid_json");
+                return Ok(());
+            }
+        };
+        let available = entry.handler.platform_available(&entry.context, &request);
+        let response = serde_json::json!({"capabilities": {"user_verifying_platform_authenticator": available}});
+        send_sign_response(&mut stream, "200 OK", Some(response.to_string().as_bytes()));
+        return Ok(());
+    }
     match entry.claim_request(&body) {
         RequestClaim::Claimed { digest } => {
             let mut guard = InFlightGuard::new(entry.request_budget.clone(), digest);
@@ -1233,7 +1246,37 @@ pub struct SignHandler {
     pub operation_lock: Arc<Mutex<()>>,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CapabilityRequest {
+    origin: String,
+    top_origin: String,
+    cross_origin: bool,
+}
+
 impl SignHandler {
+    // Discovery is read-only. The actual ceremony rechecks policy and budgets.
+    fn platform_available(&self, ctx: &SignContext, request: &CapabilityRequest) -> bool {
+        if request.cross_origin || !self.audit_gate.ping() {
+            return false;
+        }
+        let Some(origin) = parse_origin(&request.origin) else { return false; };
+        let Some(grant) = self.policy_runtime.resolve_grant_for_sign(&ctx.profile_id, &ctx.active_grant_id) else { return false; };
+        if grant.is_revoked || grant.state != super::grant::GrantState::Active {
+            return false;
+        }
+        grant.rp_ids.iter().any(|rp| {
+            let rp = if rp == ANY_RP_ID { origin.host.clone() } else { normalize_rp_id(rp) };
+            if !verify_origin_context(&request.origin, Some(&request.top_origin), false, &rp) {
+                return false;
+            }
+            ctx.profile_config.rule_for_rp(&rp).is_some_and(|rule| {
+                rule.authenticate.authorization == passless_core::agent::AgentAuthorization::Allow
+                    && rule.authenticate.user_presence == passless_core::agent::UserPresenceSource::Agent
+                    && rule.authenticate.user_verification == passless_core::agent::UserVerificationSource::Agent
+            })
+        })
+    }
     fn record_policy_deny(&self, ctx: &SignContext, rp_id: &str, reason: PolicyDenyReason) {
         let deny_event = PolicyDenyBuilder::new(
             ctx.profile_id.clone(),
@@ -4230,6 +4273,28 @@ mod tests {
             let auth_data = b64u_decode(auth_data_b64u).unwrap();
             assert!(auth_data.len() >= 37);
             u32::from_be_bytes([auth_data[33], auth_data[34], auth_data[35], auth_data[36]])
+        }
+
+        #[test]
+        fn http_capabilities_checks_origin_expiry_and_bearer_without_spending_budget() {
+            let (shutdown, _dir, sock_path, registry, token, f, handle) = setup_bound(true);
+            let probe = |origin: &str, token: &str| {
+                let body = serde_json::json!({"origin":origin,"top_origin":origin,"cross_origin":false}).to_string();
+                let req = format_sign_request(token, body.as_bytes()).replace("POST /sign ", "POST /capabilities ");
+                http_request(&sock_path, &req, body.as_bytes())
+            };
+            for _ in 0..20 {
+                assert!(probe("https://login.example.com", &token).contains("user_verifying_platform_authenticator\":true"));
+            }
+            assert!(probe("https://evil.com", &token).contains("user_verifying_platform_authenticator\":false"));
+            let body = sign_request_body("https://example.com", "example.com", "dGVzdA", vec![], false);
+            assert!(http_request(&sock_path, &format_sign_request(&token, &body), &body).contains("200 OK"));
+            f.clock.advance(Duration::from_secs(301));
+            assert!(probe("https://example.com", &token).contains("user_verifying_platform_authenticator\":false"));
+            registry.revoke(&token);
+            assert!(probe("https://example.com", &token).contains("401 Unauthorized"));
+            shutdown.store(true, Ordering::Release);
+            handle.join().unwrap();
         }
 
         #[test]
