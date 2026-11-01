@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "Passless Native Probe"
+    },
+    {
+      "name": "module_desc",
+      "value": "Offline encrypted password-store companion"
+    }
+  ]
+}

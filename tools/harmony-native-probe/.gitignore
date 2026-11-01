@@ -1,0 +1,7 @@
+build/
+oh_modules/
+.hvigor/
+local.properties
+*.hap
+*.p7b
+*.p12
