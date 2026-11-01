@@ -94,8 +94,9 @@ Absence in these audited APIs is not proof that Huawei has no private/future API
 
 Native follow-up should call the first two methods and serialize Map entries
 explicitly. Preserve device-type error801 and service-connection error1021300011.
-A native probe has now been built under `tools/harmony-native-probe`; real-device
-installation awaits its dedicated signing profile. The browser result does
+A native probe has now been built, signed, and installed on the physical phone
+under `tools/harmony-native-probe`; launch awaits an unlocked screen. Its
+`VALIDATION.md` records the current native status. The browser result does
 not substitute for that native test. One shared Passless credential across all
 three operating systems remains unproven until the acceptance sequence succeeds.
 
