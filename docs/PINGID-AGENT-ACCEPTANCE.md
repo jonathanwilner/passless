@@ -66,3 +66,13 @@ After successful step-up, Add a New Device offered PingID Mobile Application, Yu
 - Timeout: 120000 ms. Two excluded credentials; no extensions.
 
 The browser rejected the attempt with `NotAllowedError`: “The operation is not allowed at this time because the page does not have focus.” This is a browser focus failure, not evidence of server rejection or authenticator compatibility. No credential was created in this attempt. The observer recorded no challenge, credential ID, user ID, private key or assertion. Goran still needs an agent-capable Passless candidate and a focused enrollment test; platform attachment and required user verification remain acceptance gates.
+
+## Goran candidate preparation
+
+The flake now exposes an opt-in `passless-agent` package with the Cargo `agent` feature. The default package remains unchanged. Goran's candidate checkout is `/home/jonathan/src/passless-pingid-agent`; the build output link is `/home/jonathan/.local/state/passless-pingid-agent-result`. A separate Chromium package uses the same flake's pinned nixpkgs and is linked at `/home/jonathan/.local/state/passless-test-browser`.
+
+The PingID request supplies COSE algorithm identifiers as decimal strings. The extension previously rejected those strings before contacting the daemon. The candidate normalizes valid integer strings and rejects malformed or out-of-range values. All 63 extension behavioral tests passed, including the added PingID regression and invalid-value cases.
+
+The temporary acceptance profile uses the existing encrypted human backend, exact RP `pingone.com`, single-credential selection, a 1800-second session limit and 12-operation budget. Same-user registration is explicitly acknowledged and still requires a one-use registration grant. This profile is only for the HP acceptance test. PingOne hosts other tenants; before production, scope authentication to the enrolled credential reference and verify the returned HP identity. Registration must be disabled after enrollment.
+
+Candidate configuration is under `~/.local/state/passless-pingid-test/config.toml`. Runtime activation uses a systemd user override under `/run/user/1000/systemd/user/passless.service.d/90-pingid-test.conf`; it does not replace Home Manager's persistent configuration. To restore the original service, remove only that test override, run `systemctl --user daemon-reload`, then `systemctl --user restart passless.service`. Preserve the audit and encrypted credentials. A successful build or extension test is not PingID enrollment or authentication acceptance.
