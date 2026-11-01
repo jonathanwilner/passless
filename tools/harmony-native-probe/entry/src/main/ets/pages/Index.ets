@@ -21,6 +21,11 @@ struct Index {
   @State busy: boolean = false;
   @StorageLink('probeRequest') probeRequest: string = '';
   private credential: Uint8Array = new Uint8Array();
+  private decode(value: string): Uint8Array {
+    let normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+    while (normalized.length % 4 !== 0) { normalized += '='; }
+    return new util.Base64Helper().decodeSync(normalized);
+  }
   private context(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
   }
@@ -67,8 +72,8 @@ struct Index {
         if (request.operation !== operation || request.rpId !== this.rpId) {
           throw new Error('Request operation or RP does not match visible controls');
         }
-        challenge = new util.Base64Helper().decodeSync(request.challenge.replace(/-/g, '+').replace(/_/g, '/'));
-        userId = new util.Base64Helper().decodeSync(request.userId.replace(/-/g, '+').replace(/_/g, '/'));
+        challenge = this.decode(request.challenge);
+        userId = this.decode(request.userId);
         this.record(operation + '.session', request.session_id);
         this.probeRequest = '';
       }
