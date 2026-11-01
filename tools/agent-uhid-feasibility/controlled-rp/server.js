@@ -326,7 +326,27 @@ async function handleAuthenticateFinish(body) {
   }
 }
 
+// Browser diagnostics are untrusted observations, never authentication proof.
+const observations = [];
+const verifiedEvents = [];
+function recordVerification(operation, result) {
+  verifiedEvents.push({ time: new Date().toISOString(), operation, ...result });
+  if (verifiedEvents.length > 100) verifiedEvents.shift();
+}
 const routes = {
+  'GET /api/compatibility': (_req, res) => sendJson(res, 200, {
+    observations, verifiedEvents, ephemeral: true,
+  }),
+  'POST /api/compatibility': (_req, res, body) => {
+    if (typeof body.message !== 'string' || body.message.length > 4096 ||
+        typeof body.device !== 'string' || body.device.length > 120) {
+      sendJson(res, 400, { ok: false, error: 'invalid observation' });
+      return;
+    }
+    observations.push({ time: new Date().toISOString(), device: body.device, message: body.message });
+    if (observations.length > 200) observations.shift();
+    sendJson(res, 200, { ok: true });
+  },
   'GET /': (req, res) => serveStatic(res, join(__dirname, 'static', 'index.html')),
   'GET /api/status': (_req, res) => {
     sendJson(res, 200, {
@@ -341,6 +361,7 @@ const routes = {
   },
   'POST /api/register/finish': async (_req, res, body) => {
     const result = await handleRegisterFinish(body);
+    recordVerification("register", result);
     sendJson(res, result.ok ? 200 : 400, result);
   },
   'POST /api/authenticate/begin': async (_req, res, body) => {
@@ -349,6 +370,7 @@ const routes = {
   },
   'POST /api/authenticate/finish': async (_req, res, body) => {
     const result = await handleAuthenticateFinish(body);
+    recordVerification("authenticate", result);
     sendJson(res, result.ok ? 200 : 400, result);
   },
 };
