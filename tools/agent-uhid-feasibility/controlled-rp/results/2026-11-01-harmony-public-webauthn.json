@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-01",
+  "site": "https://webauthn.io/",
+  "device": "LAP-AL10",
+  "browser": "Huawei Browser",
+  "username": "harmony-probe-20261101-1804",
+  "provider": "Huawei Password Vault",
+  "registration": "Site displayed Success! Now try to authenticate... after user PIN confirmation",
+  "authentication": "Site displayed You're logged in! after same account passkey selection and user confirmation",
+  "verification_boundary": "Observed independent public site success UI; no server logs or raw assertion captured. Does not establish Passless provider support or cross-device synchronization.",
+  "registration_evidence": "https://debug.thewilners.com/#shot=20261101T180626Z-armstrong-harmony-public-webauthn-81df10fc86-d2513535",
+  "authentication_evidence": "https://debug.thewilners.com/#shot=20261101T180702Z-armstrong-harmony-public-webauthn-769fa35cfb-7820d102"
+}

@@ -204,3 +204,17 @@ module is prepared on `nixos-amd` branch `test/harmony-passkey-association`,
 commit `6842f7c4`; it has passed syntax validation but is not deployed.
 The separate HTTPS diagnostic server was stopped after collecting evidence.
 The synthetic phone credentials remain; no production credentials were changed.
+
+## Independent public-site acceptance, 1 Nov 2026
+
+On `https://webauthn.io/`, Huawei Browser and Password Vault completed registration
+and authentication for synthetic account `harmony-probe-20261101-1804`. The user
+confirmed the phone prompts. Registration displayed “Success! Now try to
+authenticate...” and authentication displayed “You're logged in!”. See
+`results/2026-11-01-harmony-public-webauthn.json` for published evidence.
+
+This run used the public website directly, with no local RP server, native
+probe, domain-association change, or developer-account approval. Acceptance is
+based on the independent site's success UI; its server logs and raw assertion
+were not captured. Google/Apple account flows and Passless credential-provider
+integration remain untested. The synthetic passkey remains in Password Vault.
