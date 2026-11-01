@@ -1,0 +1,145 @@
+{
+  "observations": [
+    {
+      "time": "2026-11-01T17:35:37.474Z",
+      "device": "ultimate-https",
+      "message": "Secure context confirmed."
+    },
+    {
+      "time": "2026-11-01T17:35:37.557Z",
+      "device": "ultimate-https",
+      "message": "Connected to RP: tv.thewilners.com (0 credentials)"
+    },
+    {
+      "time": "2026-11-01T17:35:37.762Z",
+      "device": "ultimate-https",
+      "message": "CAPABILITIES {\"origin\":\"https://tv.thewilners.com:8443\",\"secureContext\":true,\"userAgent\":\"Mozilla/5.0 (Phone; OpenHarmony 7.0; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36  ArkWeb/7.0.0.111 Mobile HuaweiBrowser/6.1.9.323\",\"publicKeyCredential\":true,\"isUserVerifyingPlatformAuthenticatorAvailable\":true,\"isConditionalMediationAvailable\":true,\"getClientCapabilities\":{\"conditionalCreate\":false,\"conditionalGet\":true,\"extension:largeBlob\":true,\"extension:uvi\":false,\"hybridTransport\":true,\"passkeyPlatformAuthenticator\":true,\"relatedOrigins\":false,\"signalAllAcceptedCredentials\":false,\"signalCurrentUserDetails\":false,\"userVerifyingPlatformAuthenticator\":true}}"
+    },
+    {
+      "time": "2026-11-01T17:36:02.577Z",
+      "device": "ultimate-https",
+      "message": "Secure context confirmed."
+    },
+    {
+      "time": "2026-11-01T17:36:02.641Z",
+      "device": "ultimate-https",
+      "message": "Connected to RP: tv.thewilners.com (0 credentials)"
+    },
+    {
+      "time": "2026-11-01T17:36:02.839Z",
+      "device": "ultimate-https",
+      "message": "CAPABILITIES {\"origin\":\"https://tv.thewilners.com:8443\",\"secureContext\":true,\"userAgent\":\"Mozilla/5.0 (Phone; OpenHarmony 7.0; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36  ArkWeb/7.0.0.111 Mobile HuaweiBrowser/6.1.9.323\",\"publicKeyCredential\":true,\"isUserVerifyingPlatformAuthenticatorAvailable\":true,\"isConditionalMediationAvailable\":true,\"getClientCapabilities\":{\"\":false,\"conditionalCreate\":true,\"conditionalGet\":true,\"extension:largeBlob\":true,\"extension:uvi\":false,\"hybridTransport\":true,\"passkeyPlatformAuthenticator\":true,\"relatedOrigins\":false,\"signalAllAcceptedCredentials\":false,\"signalCurrentUserDetails\":false,\"userVerifyingPlatformAuthenticator\":true}}"
+    },
+    {
+      "time": "2026-11-01T17:36:10.721Z",
+      "device": "ultimate-https",
+      "message": "Requesting registration options for user \"testuser\"..."
+    },
+    {
+      "time": "2026-11-01T17:36:10.734Z",
+      "device": "ultimate-https",
+      "message": "Got challenge: GHYmG-gDp-VCI17t..."
+    },
+    {
+      "time": "2026-11-01T17:36:10.735Z",
+      "device": "ultimate-https",
+      "message": "Calling navigator.credentials.create()..."
+    },
+    {
+      "time": "2026-11-01T17:36:20.356Z",
+      "device": "ultimate-https",
+      "message": "Credential created, sending for verification..."
+    },
+    {
+      "time": "2026-11-01T17:36:20.418Z",
+      "device": "ultimate-https",
+      "message": "REGISTER OK: Registration verified"
+    },
+    {
+      "time": "2026-11-01T17:36:20.418Z",
+      "device": "ultimate-https",
+      "message": "  credentialId: bt4Ex_dKi8wtrLORTKGdAQ75-IsTd90IsrHQsZRMRKM"
+    },
+    {
+      "time": "2026-11-01T17:36:20.432Z",
+      "device": "ultimate-https",
+      "message": "  details: {\"origin\":\"https://tv.thewilners.com:8443\",\"rpID\":\"tv.thewilners.com\",\"aaguid\":\"e304172b-ced4-54da-89b1-a8c1d007cd70\",\"fmt\":\"none\",\"userVerified\":true,\"credentialDeviceType\":\"singleDevice\",\"credentialBackedUp\":false,\"counter\":1,\"totalCredentials\":1}"
+    },
+    {
+      "time": "2026-11-01T17:36:20.446Z",
+      "device": "ultimate-https",
+      "message": "Connected to RP: tv.thewilners.com (1 credentials)"
+    },
+    {
+      "time": "2026-11-01T17:36:42.760Z",
+      "device": "ultimate-https",
+      "message": "Requesting authentication options for user \"default-user\"..."
+    },
+    {
+      "time": "2026-11-01T17:36:42.772Z",
+      "device": "ultimate-https",
+      "message": "Got challenge: rXK0Mu8lb_Gv10pD..."
+    },
+    {
+      "time": "2026-11-01T17:36:42.772Z",
+      "device": "ultimate-https",
+      "message": "Calling navigator.credentials.get()..."
+    },
+    {
+      "time": "2026-11-01T17:37:01.317Z",
+      "device": "ultimate-https",
+      "message": "Assertion received for credential: bt4Ex_dKi8wtrLORTKGd..."
+    },
+    {
+      "time": "2026-11-01T17:37:01.384Z",
+      "device": "ultimate-https",
+      "message": "AUTH OK: Authentication verified"
+    },
+    {
+      "time": "2026-11-01T17:37:01.389Z",
+      "device": "ultimate-https",
+      "message": "  credentialId: bt4Ex_dKi8wtrLORTKGdAQ75-IsTd90IsrHQsZRMRKM"
+    },
+    {
+      "time": "2026-11-01T17:37:01.391Z",
+      "device": "ultimate-https",
+      "message": "  details: {\"origin\":\"https://tv.thewilners.com:8443\",\"rpID\":\"tv.thewilners.com\",\"userVerified\":true,\"credentialDeviceType\":\"singleDevice\",\"credentialBackedUp\":false,\"counter\":2}"
+    }
+  ],
+  "verifiedEvents": [
+    {
+      "time": "2026-11-01T17:36:20.359Z",
+      "operation": "register",
+      "ok": true,
+      "credentialId": "bt4Ex_dKi8wtrLORTKGdAQ75-IsTd90IsrHQsZRMRKM",
+      "message": "Registration verified",
+      "details": {
+        "origin": "https://tv.thewilners.com:8443",
+        "rpID": "tv.thewilners.com",
+        "aaguid": "e304172b-ced4-54da-89b1-a8c1d007cd70",
+        "fmt": "none",
+        "userVerified": true,
+        "credentialDeviceType": "singleDevice",
+        "credentialBackedUp": false,
+        "counter": 1,
+        "totalCredentials": 1
+      }
+    },
+    {
+      "time": "2026-11-01T17:37:01.336Z",
+      "operation": "authenticate",
+      "ok": true,
+      "credentialId": "bt4Ex_dKi8wtrLORTKGdAQ75-IsTd90IsrHQsZRMRKM",
+      "message": "Authentication verified",
+      "details": {
+        "origin": "https://tv.thewilners.com:8443",
+        "rpID": "tv.thewilners.com",
+        "userVerified": true,
+        "credentialDeviceType": "singleDevice",
+        "credentialBackedUp": false,
+        "counter": 2
+      }
+    }
+  ],
+  "ephemeral": true
+}

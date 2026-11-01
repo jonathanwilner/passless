@@ -130,3 +130,48 @@ relying-party domain and native APIs next before attributing it to the platform.
 Use `?discoverable=1#btnAuthenticate` to repeat the discoverable case. Standard
 mode uses the original registered credential allow list. The synthetic credential
 remains in Huawei Password Vault under localhost/testuser; server state is temporary.
+
+## HTTPS physical-device acceptance, 1 Nov 2026
+
+The same LAP-AL10 completed both registration and sign-in on
+`https://tv.thewilners.com:8443`, RP ID `tv.thewilners.com`:
+
+- Registration verified at 17:36:20 UTC, authentication verified at 17:37:01 UTC.
+- Both operations used credential `bt4Ex_dKi8wtrLORTKGdAQ75-IsTd90IsrHQsZRMRKM`.
+- Server validation confirmed the expected origin, RP ID, challenge, and signature.
+  User verification was true. The authenticator counter advanced from 1 to 2.
+- Returned flags were singleDevice and credentialBackedUp=false. These flags do
+  not establish Huawei cloud backup behavior independently.
+- Evidence: `results/2026-11-01-harmony-real-https.json` contains synthetic browser
+  observations separately from server-verified events.
+- [Phone test screen](https://debug.thewilners.com/#shot=20261101T173726Z-armstrong-harmony-passkey-compatibility-d8062d9ddc-d21c581d).
+  The server report is the cryptographic acceptance evidence.
+
+Normal HTTPS resolved this test failure. The earlier localhost failure's exact
+internal cause remains unknown. This success demonstrates Huawei Password Vault
+registration and authentication. It does not demonstrate shared Passless storage,
+credential export, Android/Linux reuse, or third-party provider registration.
+The native diagnostic lane is maintained separately under `tools/harmony-native-probe`.
+
+### Isolated HTTPS lab
+
+The server accepts `RP_ID` and `RP_ORIGIN`. For a non-localhost RP, the origin must
+be HTTPS with the exact RP hostname. Non-loopback listening requires `LAB_TOKEN`,
+`TLS_CERT`, and `TLS_KEY`. Requests need either a secure HttpOnly SameSite cookie
+issued by `/enter?token=...`, or `Authorization: Bearer ...`. Foreign Origin headers
+are rejected. JSON request bodies are limited to 64 KiB. No permissive CORS header
+is emitted. Keep tokens out of source, evidence reports, and public links.
+
+For this run, existing LAN DNS resolved `tv.thewilners.com` to Armstrong
+192.168.2.120. Its existing ACME certificate covers this hostname and expires
+7 Jan 2027. A separate temporary server used port8443; the television services,
+Cloudflare routes, DNS, and fleet configurations were unchanged. The server read
+the certificate, dropped supplementary groups and root privileges, then listened
+as the normal user. `LAB_UID` and `LAB_GID` support this privilege drop. The TLS
+private key remains on Armstrong and is never copied to the phone or repository.
+
+This remains an ephemeral diagnostic lab. Stop it after the native/browser run;
+server credentials and challenges disappear. Synthetic phone credentials may
+remain in Password Vault under tv.thewilners.com/testuser. The standard local
+workflow still defaults to localhost:8443. Run `npm test` for all tests; this
+change passes 44 tests, including remote-access and origin guards.

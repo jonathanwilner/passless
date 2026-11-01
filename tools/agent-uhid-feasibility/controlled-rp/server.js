@@ -8,6 +8,7 @@ import {
 } from '@simplewebauthn/server';
 
 import { createServer } from 'node:http';
+import { createServer as createSecureServer } from 'node:https';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -15,11 +16,18 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-const RP_ID = 'localhost';
+const RP_ID = process.env.RP_ID || 'localhost';
 const RP_NAME = 'Passless Controlled RP';
 const ORIGIN_HTTP = 'http://localhost:8443';
 const ORIGIN_HTTPS = 'https://localhost:8443';
-const EXPECTED_ORIGIN = [ORIGIN_HTTP, ORIGIN_HTTPS];
+const EXPECTED_ORIGIN = process.env.RP_ORIGIN
+  ? [new URL(process.env.RP_ORIGIN).origin] : [ORIGIN_HTTP, ORIGIN_HTTPS];
+if (RP_ID !== 'localhost' && (!process.env.RP_ORIGIN ||
+    new URL(process.env.RP_ORIGIN).protocol !== 'https:' ||
+    new URL(process.env.RP_ORIGIN).hostname !== RP_ID)) {
+  throw new Error('Remote lab requires an exact matching HTTPS RP_ORIGIN and RP_ID');
+}
+const LAB_TOKEN = process.env.LAB_TOKEN || '';
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -104,7 +112,15 @@ function updateCredentialCounter(credentialId, newCounter) {
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > 65536) {
+        reject(new Error('request exceeds 64 KiB'));
+      } else {
+        chunks.push(chunk);
+      }
+    });
     req.on('end', () => {
       try {
         const body = Buffer.concat(chunks).toString();
@@ -121,8 +137,7 @@ function sendJson(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Cache-Control': 'no-store',
   });
   res.end(body);
 }
@@ -377,6 +392,27 @@ const routes = {
 
 async function requestHandler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  if (LAB_TOKEN) {
+    if (req.method === 'GET' && url.pathname === '/enter' && url.searchParams.get('token') === LAB_TOKEN) {
+      res.writeHead(303, {
+        Location: '/compatibility.html?device=ultimate-https',
+        'Set-Cookie': `lab=${LAB_TOKEN}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=7200`,
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+      });
+      res.end();
+      return;
+    }
+    const cookie = (req.headers.cookie || '').split(';').some(value => value.trim() === `lab=${LAB_TOKEN}`);
+    if (!cookie && req.headers.authorization !== `Bearer ${LAB_TOKEN}`) {
+      sendJson(res, 403, { ok: false, error: 'lab access required' });
+      return;
+    }
+    if (req.headers.origin && !EXPECTED_ORIGIN.includes(req.headers.origin)) {
+      sendJson(res, 403, { ok: false, error: 'unexpected request origin' });
+      return;
+    }
+  }
   const method = req.method;
   const key = `${method} ${url.pathname}`;
 
@@ -408,9 +444,20 @@ async function requestHandler(req, res) {
 }
 
 function startServer(port = 8443, host = '127.0.0.1') {
-  const server = createServer(requestHandler);
+  if (host !== '127.0.0.1' && host !== '::1' && (!LAB_TOKEN || !process.env.TLS_CERT || !process.env.TLS_KEY)) {
+    throw new Error('Non-loopback lab requires LAB_TOKEN and TLS certificate/key');
+  }
+  const server = process.env.TLS_CERT && process.env.TLS_KEY
+    ? createSecureServer({ cert: readFileSync(process.env.TLS_CERT), key: readFileSync(process.env.TLS_KEY) }, requestHandler)
+    : createServer(requestHandler);
+  // Read the system certificate first, then relinquish elevated privileges.
+  if (process.env.LAB_UID) {
+    process.setgroups([]);
+    process.setgid(Number(process.env.LAB_GID));
+    process.setuid(Number(process.env.LAB_UID));
+  }
   server.listen(port, host, () => {
-    console.log(`Controlled RP listening on http://${host}:${port}`);
+    console.log(`Controlled RP listening on ${process.env.TLS_CERT ? 'https' : 'http'}://${host}:${port}`);
     console.log(`RP ID: ${RP_ID}`);
     console.log(`Expected origins: ${EXPECTED_ORIGIN.join(', ')}`);
     console.log('Press Ctrl+C to stop.\n');
