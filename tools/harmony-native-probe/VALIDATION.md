@@ -27,10 +27,37 @@ Signed HAP SHA-256:
 Signing was tracked as `sign-harmony-native-probe` with exit status zero.
 The first launch returned `10106102` because the phone screen was locked.
 
-Real-device native capabilities, native registration, native origin, and
-server-verified native authentication remain pending. Separately, the browser
-lab successfully verified HTTPS registration and authentication on this phone;
-see `harmonyos/VALIDATION.md` and the controlled-RP compatibility records.
+## Physical-device runtime
+
+After unlock, native API calls ran on the physical phone. The SDK declares a
+Map capability result, while this runtime returns a plain object. The probe now
+serializes both representations. Raw capability and ceremony records are in
+`runtime-20261101.json`. The corrected build passed in 15.5 seconds and its
+signed HAP SHA-256 is
+`491ef242bd9f9101261869fe099b7aea95455c3178b23aea020a7e8aeab417fa`.
+
+The device reports conditional create/get, hybrid transport, platform passkeys,
+user-verifying platform authentication, largeBlob and authTypeList support.
+Related origins and the three credential signal APIs report false.
+`getPlatformAuthenticators` returns three entries: PIN (`uvm=4`) is available;
+fingerprint (`uvm=2`) and face (`uvm=16`) are unavailable in current device state.
+These capability reports do not establish every feature's end-to-end operation.
+
+Native registration with a fresh challenge from the HTTPS lab succeeded at
+17:53:15 UTC, about nine seconds after invocation. Native clientData origin is
+`ohos:app-id:BFZ8bphwYXAdkE7VzPoVRVkN+MMi4FIny77pNojzGb289USZXOqcYbU4IzbKGTrf3aw96bui+BnLnY6aiN/Izd4`.
+This matches the independently extracted uncompressed EC public key from the
+signing certificate, base64 encoded without trailing padding, prefixed with
+`ohos:app-id:`. The captured registration awaits strict offline verification;
+the browser verifier was not weakened or given an arbitrary client origin.
+
+Native authentication returned `1021300003`, `System integrity check failed.`,
+in 241 ms, without a user-verification prompt. The system FIDO service records
+`Fido2Client: checkRpInAppLink fail` immediately before this code. This narrows
+the failed check to RP/app association. A trusted App Linking association for
+the controlled RP and signed probe remains the next native integration step.
+No authentication assertion was produced. Browser HTTPS registration and
+authentication on this phone have separately passed server verification.
 
 ## Evidence
 
@@ -43,3 +70,12 @@ https://debug.thewilners.com/#shot=20261101T174128Z-armstrong-harmony-native-pas
 An earlier capture raced the QR refresh and retained the old QR pixels. Future
 runs must wait for the image data to change before capturing a refreshed code.
 Do not reuse these expired login QR screenshots for another session.
+
+Capability screenshot:
+https://debug.thewilners.com/#shot=20261101T175249Z-armstrong-harmony-native-passkey-probe-38fc7bebba-04c2f263
+
+Initial harness serialization discrepancy:
+https://debug.thewilners.com/#shot=20261101T175144Z-armstrong-harmony-native-passkey-probe-050e506d89-ac4511b6
+
+Native registration result and authentication failure:
+https://debug.thewilners.com/#shot=20261101T175454Z-armstrong-harmony-native-passkey-probe-d43875e00b-34f0e77a

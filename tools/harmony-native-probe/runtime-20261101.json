@@ -1,0 +1,47 @@
+[
+  {
+    "time": "2026-11-01T17:52:39.994Z",
+    "operation": "getClientCapabilities",
+    "detail": "{\"conditionalCreate\":true,\"conditionalGet\":true,\"hybridTransport\":true,\"passkeyPlatformAuthenticator\":true,\"userVerifyingPlatformAuthenticator\":true,\"relatedOrigins\":false,\"signalAllAcceptedCredentials\":false,\"signalCurrentUserDetails\":false,\"signalUnknownCredential\":false,\"extension:largeblob\":true,\"extension:authTypeList\":true}"
+  },
+  {
+    "time": "2026-11-01T17:52:40.042Z",
+    "operation": "getPlatformAuthenticators",
+    "detail": "[{\"aaguid\":\"sRszuswpUyeLj+XwRSDu1A==\",\"uvm\":2,\"extensions\":[\"largeBlob\"],\"isAvailable\":false},{\"aaguid\":\"4wQXK87UVNqJsajB0AfNcA==\",\"uvm\":4,\"extensions\":[\"largeBlob\"],\"isAvailable\":true},{\"aaguid\":\"HpzoK11vVQanGafzOR4meQ==\",\"uvm\":16,\"extensions\":[\"largeBlob\"],\"isAvailable\":false}]"
+  },
+  {
+    "time": "2026-11-01T17:53:06.554Z",
+    "operation": "register.begin",
+    "detail": "tv.thewilners.com"
+  },
+  {
+    "time": "2026-11-01T17:53:06.563Z",
+    "operation": "register.session",
+    "detail": "eeb7b049cbb7689137138403ce00e908"
+  },
+  {
+    "time": "2026-11-01T17:53:15.479Z",
+    "operation": "register.clientData",
+    "detail": "{\"type\":\"webauthn.create\",\"challenge\":\"MqaLg3-JMEZ_NzsX4k479DG4ojZvo2NqRlYQaIXkYoc\",\"origin\":\"ohos:app-id:BFZ8bphwYXAdkE7VzPoVRVkN+MMi4FIny77pNojzGb289USZXOqcYbU4IzbKGTrf3aw96bui+BnLnY6aiN/Izd4\",\"crossOrigin\":false}"
+  },
+  {
+    "time": "2026-11-01T17:53:15.479Z",
+    "operation": "register.complete",
+    "detail": "Diagnostic response only; not server verified"
+  },
+  {
+    "time": "2026-11-01T17:53:55.812Z",
+    "operation": "authenticate.begin",
+    "detail": "tv.thewilners.com"
+  },
+  {
+    "time": "2026-11-01T17:53:55.816Z",
+    "operation": "authenticate.session",
+    "detail": "26dfea7ea3bd24610dbb6358258902d4"
+  },
+  {
+    "time": "2026-11-01T17:53:56.053Z",
+    "operation": "authenticate",
+    "detail": "{\"code\":1021300003,\"message\":\"System integrity check failed.\",\"elapsedMs\":241}"
+  }
+]
