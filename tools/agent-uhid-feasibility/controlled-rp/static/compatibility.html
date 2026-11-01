@@ -157,7 +157,7 @@ async function register() {
       },
       challenge: b64urlDecode(options.challenge),
       pubKeyCredParams: options.pubKeyCredParams,
-      timeout: options.timeout,
+      timeout: 180000,
       attestation: options.attestation,
       authenticatorSelection: options.authenticatorSelection,
     };
@@ -220,7 +220,8 @@ async function authenticate() {
   const btn = document.getElementById('btnAuthenticate');
   btn.disabled = true;
   try {
-    const userId = document.getElementById('authUserId').value || undefined;
+    const userId = new URLSearchParams(location.search).has('discoverable')
+      ? undefined : document.getElementById('authUserId').value || undefined;
 
     log(`Requesting authentication options${userId ? ` for user "${userId}"` : ' (discoverable)'}...`);
     const options = await apiPost('/api/authenticate/begin', { userId });
@@ -228,7 +229,7 @@ async function authenticate() {
 
     const publicKeyOptions = {
       challenge: b64urlDecode(options.challenge),
-      timeout: options.timeout,
+      timeout: 180000,
       rpId: options.rpId,
       userVerification: options.userVerification,
     };

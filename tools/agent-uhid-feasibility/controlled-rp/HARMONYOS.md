@@ -97,3 +97,36 @@ explicitly. Preserve device-type error801 and service-connection error1021300011
 A native probe has not been built or run in this change. The browser result does
 not substitute for that native test. One shared Passless credential across all
 three operating systems remains unproven until the acceptance sequence succeeds.
+
+## Real device test, 1 Nov 2026
+
+LAP-AL10 at the user-provided wireless-debug address, HarmonyOS
+7.0.0.111(SP12C14E111R6P4), HuaweiBrowser6.1.9.323/ArkWeb7.0.0.111:
+
+- Secure context, WebAuthn, platform authenticator, conditional mediation, and
+  hybrid transport all reported available.
+- Huawei Password Vault offered to create the synthetic `testuser` credential.
+  The user confirmed on the phone. The server verified registration at
+  17:21:53 UTC, userVerified=true, counter=1, credentialDeviceType=singleDevice,
+  credentialBackedUp=false. This describes the returned WebAuthn flags, not an
+  independent audit of Huawei storage or backup behavior.
+- Initial authentication returned NotAllowedError. The user saw a PIN prompt
+  and a timeout in the log. No authentication signature has yet been verified.
+- Extended the browser lab operation timeout to three minutes for manual PIN
+  entry. Server challenges already expire after five minutes.
+- HDC commands subsequently stalled although the TCP debugging port remained
+  reachable. Unlocking the phone restored command responses.
+
+This is a Huawei-created credential. Shared Passless credentials, cloud sync,
+QR authentication, and native-provider integration are still unverified.
+
+After unlocking, a fresh page with the three-minute timeout returned
+NotAllowedError approximately0.3 seconds after credentials.get(). The user
+confirmed no prompt appeared. A discoverable request without a user-specific
+allow list also failed in approximately0.3 seconds. The root cause is unresolved;
+this is not evidence of an elapsed three-minute timeout. Test a normal HTTPS
+relying-party domain and native APIs next before attributing it to the platform.
+
+Use `?discoverable=1#btnAuthenticate` to repeat the discoverable case. Standard
+mode uses the original registered credential allow list. The synthetic credential
+remains in Huawei Password Vault under localhost/testuser; server state is temporary.
