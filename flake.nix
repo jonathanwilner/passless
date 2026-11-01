@@ -9,6 +9,7 @@
       packages = forAllSystems (system: let pkgs = import nixpkgs { inherit system; }; in {
         default = pkgs.callPackage ./nix/package.nix { };
         passless = self.packages.${system}.default;
+        passless-agent = pkgs.callPackage ./nix/package.nix { withAgent = true; };
       });
       checks = forAllSystems (system: let pkgs = import nixpkgs { inherit system; }; in {
         inherit (self.packages.${system}) passless;

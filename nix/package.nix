@@ -1,4 +1,4 @@
-{ lib, rustPlatform, pkg-config, systemd, makeWrapper, installShellFiles, dbus, gnupg, git, openssh }:
+{ lib, rustPlatform, pkg-config, systemd, makeWrapper, installShellFiles, dbus, gnupg, git, openssh, withAgent ? false }:
 rustPlatform.buildRustPackage {
   pname = "passless";
   version = "0.20.2";
@@ -13,6 +13,7 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = [ pkg-config makeWrapper installShellFiles dbus ];
   buildInputs = [ systemd ];
   cargoBuildFlags = [ "-p" "passless-rs" ];
+  buildFeatures = lib.optional withAgent "agent";
   # Unit tests only. Hardware and user-interaction tests require a separate live session.
   cargoTestFlags = [ "-p" "passless-core" "-p" "passless-config-doc" ];
   postBuild = ''
