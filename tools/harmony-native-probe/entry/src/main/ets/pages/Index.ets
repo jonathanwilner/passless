@@ -49,8 +49,12 @@ struct Index {
     try {
       const caps = await fido2.getClientCapabilities(this.context());
       const rows: string[] = [];
-      caps.forEach((value: boolean, key: fido2.ClientCapability) => { rows.push(key + '=' + value); });
-      this.record('getClientCapabilities', rows.join('\n'));
+      if (typeof caps.forEach === 'function') {
+        caps.forEach((value: boolean, key: fido2.ClientCapability) => { rows.push(key + '=' + value); });
+        this.record('getClientCapabilities', rows.join('\n'));
+      } else {
+        this.record('getClientCapabilities', JSON.stringify(caps));
+      }
     } catch (error) { this.failure('getClientCapabilities', error as BusinessError, start); }
     start = Date.now();
     try { this.record('getPlatformAuthenticators', JSON.stringify(await fido2.getPlatformAuthenticators(this.context()))); }
