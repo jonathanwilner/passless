@@ -48,8 +48,10 @@ Native registration with a fresh challenge from the HTTPS lab succeeded at
 `ohos:app-id:BFZ8bphwYXAdkE7VzPoVRVkN+MMi4FIny77pNojzGb289USZXOqcYbU4IzbKGTrf3aw96bui+BnLnY6aiN/Izd4`.
 This matches the independently extracted uncompressed EC public key from the
 signing certificate, base64 encoded without trailing padding, prefixed with
-`ohos:app-id:`. The captured registration awaits strict offline verification;
-the browser verifier was not weakened or given an arbitrary client origin.
+`ohos:app-id:`. Strict offline verification succeeded using the original server challenge,
+RP ID, independently confirmed HAP signer leaf origin, and required user
+verification. The packed attestation signature verified, userVerified was true,
+and counter was 1. The browser verifier retained its exact HTTPS origin.
 
 Native authentication returned `1021300003`, `System integrity check failed.`,
 in 241 ms, without a user-verification prompt. The system FIDO service records
@@ -79,3 +81,55 @@ https://debug.thewilners.com/#shot=20261101T175144Z-armstrong-harmony-native-pas
 
 Native registration result and authentication failure:
 https://debug.thewilners.com/#shot=20261101T175454Z-armstrong-harmony-native-passkey-probe-d43875e00b-34f0e77a
+
+## Native RP association follow-up
+
+The installed bundle reports `appIdentifier=6918746563381217948`. This is the
+identifier required in App Linking domain JSON; it differs from the
+certificate-derived native WebAuthn origin.
+
+The probe manifest now declares a separate domain-verified HTTPS skill for
+`tv.thewilners.com`, restricted to `passless-native-probe` paths so ordinary TV
+links retain their existing behavior. The skill uses `entity.system.browsable`,
+`ohos.want.action.viewData`, and `domainVerify: true`.
+
+Huawei's [App Linking guide](https://developer.huawei.com/consumer/cn/doc/doccenter-capabilities/app-linking-startupapp),
+updated 21 Oct 2026, also requires the domain association file at
+`https://tv.thewilners.com/.well-known/applinking.json` and domain publication in
+the app's AppGallery Connect project. The file schema is:
+
+```json
+{"applinking":{"apps":[{"appIdentifier":"6918746563381217948"}]}}
+```
+
+The currently authenticated CN developer portal redirects to a real-name
+verification rejection. Its stated reason directs this account to the overseas
+registration and verification site. Debug certificate issuance succeeded, but
+project-level App Linking publication is not established. No replacement app
+identity or new account was created. The domain file also requires a separately
+reviewed server configuration deployment. Manifest installation alone does not
+establish a verified association, so no repeated authentication ceremony was run.
+
+After both association gates are complete, inspect
+`hdc shell hidumper -s AppDomainVerifyManager`, allow at least 20 seconds after
+installation, and require a success record for this bundle/domain before a fresh
+native authentication challenge. Huawei documents a possible 24-hour retry delay
+following a failed domain check. The passkey-specific
+[ArkTS guide](https://developer.huawei.com/consumer/cn/doc/doccenter-capabilities/onlineauthentication-passkey-arkts)
+continues to describe register/authenticate without detailing this runtime
+association failure; the service log supplies the specific failed check.
+
+The manifest update built in 13 seconds, passed HAP signature verification,
+and installed successfully. Its signed HAP SHA-256 is
+`5700ca028961e173c280f2e7ed891e6a96da4afe058d460b0040d25709d6475c`.
+After installation, the domain manager reports:
+
+```text
+com.thewilners.passless.probe:
+  appIdentifier:6918746563381217948
+  domain verify status:
+    https://tv.thewilners.com:client_error
+```
+
+This confirms the manifest now reaches domain validation. Association remains
+incomplete. No additional passkey prompt or authentication attempt was triggered.
