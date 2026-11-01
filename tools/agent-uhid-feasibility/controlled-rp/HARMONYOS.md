@@ -3,7 +3,10 @@
 This lab uses stock browser WebAuthn and server-side cryptographic verification.
 It never injects an authenticator or claims that decrypting a vault proves passkey support.
 Use synthetic accounts only. The server stores credentials and reports in memory;
-restart clears the baseline. Bind to loopback and tunnel it; do not publish this lab.
+restart clears the baseline. Loopback forwarding is the original mode. For the
+validated authenticated TLS mode, see the HTTPS section below. Do not expose an
+unauthenticated test server. The [consolidated record](../../../docs/HARMONYOS-PASSKEY-SYSTEM.md)
+separates browser, native RP and provider results.
 
 ## Run
 
@@ -16,8 +19,9 @@ node server.js
 ```
 
 On managed fleet machines, run dependency installation and tests through `nom-tmux`.
-The origin must stay `http://localhost:8443` on every device. Changing the port
-changes the WebAuthn origin and is not supported by this harness.
+For the loopback procedure below, keep `http://localhost:8443` on every device.
+Changing the port changes the WebAuthn origin. Trusted HTTPS mode instead uses
+explicit `RP_ID` and `RP_ORIGIN`; see the later HTTPS instructions.
 
 Forward the same server to an emulator host, leaving SSH running:
 
@@ -92,10 +96,11 @@ passkey credential-provider extension. The `credentialProvider` field in API26
 DID APIs is for digital identity credentials, not a passkey-provider interface.
 Absence in these audited APIs is not proof that Huawei has no private/future API.
 
-Native follow-up should call the first two methods and serialize Map entries
+The native probe calls the first two methods and serializes Map entries
 explicitly. Preserve device-type error801 and service-connection error1021300011.
 A native probe has now been built, signed, and installed on the physical phone
-under `tools/harmony-native-probe`; launch awaits an unlocked screen. Its
+under `tools/harmony-native-probe`; launch and registration completed after unlock.
+Authentication then failed the app/domain association check. Its
 `VALIDATION.md` records the current native status. The browser result does
 not substitute for that native test. One shared Passless credential across all
 three operating systems remains unproven until the acceptance sequence succeeds.

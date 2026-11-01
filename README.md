@@ -7,6 +7,9 @@
   <br>
 </h1>
 
+
+Cross-platform work: [HarmonyOS evidence and status](docs/HARMONYOS-PASSKEY-SYSTEM.md) · [Five implementation options](docs/plans/cross-platform-passkey-options.md).
+
 ![Build status](https://img.shields.io/github/actions/workflow/status/pando85/passless/rust.yml?branch=master)
 ![passless license](https://img.shields.io/github/license/pando85/passless)
 

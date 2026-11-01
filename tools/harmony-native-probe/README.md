@@ -1,5 +1,8 @@
 # HarmonyOS native passkey diagnostic
 
+
+See the [consolidated evidence and system plan](../../docs/HARMONYOS-PASSKEY-SYSTEM.md). Native RP success and credential-provider support are separate acceptance gates.
+
 This isolated ArkTS app calls Huawei OnlineAuthenticationKit `fido2` directly.
 Bundle: `com.thewilners.passless.probe`. It does not change the Passless companion
 or install a credential provider.

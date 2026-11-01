@@ -1,5 +1,8 @@
 # Passless HarmonyOS companion preview
 
+
+See the [consolidated cross-platform evidence](../docs/HARMONYOS-PASSKEY-SYSTEM.md) and [five implementation options](../docs/plans/cross-platform-passkey-options.md) for the current scope and remaining gates.
+
 This is a HarmonyOS Stage app with an ArkUI shell, native document
 pickers, a native GitHub HTTPS bridge, and an ArkWeb interface. OpenPGP.js performs credential decryption.
 It reads the portable CBOR schema used by Android Password Store
