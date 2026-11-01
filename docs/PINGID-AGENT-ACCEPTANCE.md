@@ -76,3 +76,21 @@ The PingID request supplies COSE algorithm identifiers as decimal strings. The e
 The temporary acceptance profile uses the existing encrypted human backend, exact RP `pingone.com`, single-credential selection, a 1800-second session limit and 12-operation budget. Same-user registration is explicitly acknowledged and still requires a one-use registration grant. This profile is only for the HP acceptance test. PingOne hosts other tenants; before production, scope authentication to the enrolled credential reference and verify the returned HP identity. Registration must be disabled after enrollment.
 
 Candidate configuration is under `~/.local/state/passless-pingid-test/config.toml`. Runtime activation uses a systemd user override under `/run/user/1000/systemd/user/passless.service.d/90-pingid-test.conf`; it does not replace Home Manager's persistent configuration. To restore the original service, remove only that test override, run `systemctl --user daemon-reload`, then `systemctl --user restart passless.service`. Preserve the audit and encrypted credentials. A successful build or extension test is not PingID enrollment or authentication acceptance.
+
+## Live candidate result, 1 Nov 2026
+
+The final ARM64 candidate at commit `87039d1` built successfully on Goran, including its Rust check phase. Output: `/nix/store/vx63qqmjwzs387ncqsv9g4kqam3ns82n-passless-0.20.2`. The dashboard records `build-passless-pingid-candidate` and `test-passless-pingid-extension` as succeeded with exit code 0. This establishes packaging and test success, not PingID acceptance.
+
+The managed Chromium 155 browser loaded the extension. Goran requires its established user-namespace sandbox approach: `--disable-setuid-sandbox` and an AppArmor `userns` allowance for the exact Chromium binary. A temporary profile was loaded only for the test. No global sandbox relaxation was applied. `browser_scope = "profile"` avoided the initial request-thread parent-death problem. Session and grant TTL limits were aligned at 1800 seconds; registration grants retain their independent short limit. Restarting the candidate required stopping the service and moving its stale agent runtime directory before starting it again.
+
+Live PingID evidence from DOM and browser API inspection:
+
+- Native `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` returned false. The extension intercepts create/get but does not implement provider capability discovery.
+- PingID rejected the existing platform method in the managed browser with “This browser doesn't support your current authentication method.”
+- Existing authentication succeeded in normal Chrome. Transferring only the fresh PingID cookies and current enrollment URL in memory let the managed browser reach the authenticated Add a New Device screen.
+- Normal Chrome offered Biometrics; the managed browser hid that option. The Yubikey option opened a separate button/tap pairing form and did not resolve the platform-provider issue.
+- No one-use registration grant was issued and no new PingID credential was enrolled. Existing devices and priorities remain unchanged. Automatic HP renewal is unverified.
+
+After this bounded test, the runtime systemd override was removed and the original Home Manager Passless service was restored and confirmed active. The temporary AppArmor profile was unloaded. Candidate outputs, configuration and audit data remain available for further development. The normal Chrome enrollment tab remains available.
+
+Next implementation: add a read-only, authenticated provider-capability query through the extension broker and native daemon. Derive availability from the live lease, origin/RP policy and supported user-verification mode; preserve native availability and return false on unavailable/expired agent sessions. Do not hard-code a global true result or describe agent-derived verification as a human biometric. Test native fallback, expired sessions, denied origins and allowed profiles before rebuilding. Then repeat one-use enrollment and server-verified authentication, bind production access to the resulting HP credential, disable registration, and only then integrate teams-cli renewal.
