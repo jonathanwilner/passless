@@ -177,3 +177,19 @@ server credentials and challenges disappear. Synthetic phone credentials may
 remain in Password Vault under tv.thewilners.com/testuser. The standard local
 workflow still defaults to localhost:8443. Run `npm test` for all tests; this
 change passes 44 tests, including remote-access and origin guards.
+
+## Native physical-device result, 1 Nov 2026
+
+The signed diagnostic HAP registered a credential successfully. Offline validation
+using the original server challenge, RP ID, user verification, and the origin
+derived from the verified HAP signer passed. See
+`results/2026-11-01-harmony-native-registration.json`. The credential is separate
+from the browser test credential. `verify-native-registration.mjs` reproduces
+validation with the original options, response, and independently verified HAP
+certificate chain. The chain is supplied by the operator, not trusted from the
+client response. This does not change the browser server's origin policy.
+
+Native authentication failed before a prompt with error 1021300003 in 241 ms.
+The specific service log is `Fido2Client: checkRpInAppLink fail`. This identifies
+an app-to-RP association check as the current boundary. No native assertion or
+shared Passless credential has yet been verified.

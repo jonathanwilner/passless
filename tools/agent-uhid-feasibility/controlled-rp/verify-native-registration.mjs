@@ -1,0 +1,22 @@
+// Offline diagnostic only: inputs must come from the original RP and verified HAP.
+import { readFileSync } from 'node:fs';
+import { X509Certificate } from 'node:crypto';
+import { verifyRegistrationResponse } from '@simplewebauthn/server';
+const [optionsPath, responsePath, chainPath] = process.argv.slice(2);
+if (!chainPath) throw new Error('Usage: node verify-native-registration.mjs OPTIONS RESPONSE VERIFIED_HAP_CERT_CHAIN');
+const options = JSON.parse(readFileSync(optionsPath));
+const response = JSON.parse(readFileSync(responsePath));
+const chain = (readFileSync(chainPath, 'utf8').match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) || []).map(pem => new X509Certificate(pem));
+const leaves = chain.filter(cert => !cert.ca);
+if (leaves.length !== 1) throw new Error('Require exactly one signer leaf');
+const leaf = leaves[0];
+if (!chain.some(issuer => issuer.ca && leaf.checkIssued(issuer) && leaf.verify(issuer.publicKey))) throw new Error('Signer issuer verification failed');
+const jwk = leaf.publicKey.export({format:'jwk'});
+if (jwk.crv !== 'P-256') throw new Error('Expected P-256 HAP signer');
+const point = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]);
+const expectedOrigin = 'ohos:app-id:' + point.toString('base64').replace(/=+$/, '');
+response.response.clientDataJSON = response.response.clientDataJSON ?? response.response.clientDataJson;
+response.clientExtensionResults ??= {};
+const result = await verifyRegistrationResponse({response, expectedChallenge:options.challenge, expectedOrigin, expectedRPID:options.rp.id, requireUserVerification:true});
+console.log(JSON.stringify({...result, expectedOrigin, expectedRPID:options.rp.id, signerCertificateFingerprint:leaf.fingerprint256}, (_,v) => v instanceof Uint8Array ? Buffer.from(v).toString('base64url') : v, 2));
+if (!result.verified) process.exitCode = 1;
