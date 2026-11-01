@@ -33,7 +33,7 @@ The user confirmed successful sign-in using the existing passkey. The dedicated 
 
 A second authorization request reused the newly established federation session and returned without a fresh passkey prompt. The earlier HP enrollment-link page could not be restored from browser history because it required form resubmission. The user was asked to open the authenticated HP passkey enrollment/device-management page. Registration policy and agent credential acceptance remain unknown. No new credential was registered.
 
-## Enrollment policy discovered in browser history
+## Separate HP enrollment route discovered in browser history
 
 Goran's Chrome history identified the stable entry point **https://www.hp.com/passkey-enrollment**. Opening it in the dedicated live Chrome tab redirected to HP's PingOne DaVinci enrollment policy. The rendered DOM reported:
 
@@ -41,6 +41,28 @@ Goran's Chrome history identified the stable entry point **https://www.hp.com/pa
 > HP-Managed PC Required
 > HP Passkey enrollment requires a HP-Managed PC with Windows Hello configured. Please switch to your HP-managed device and try again.
 
-This is a concrete enrollment gate on Goran, before any credential-creation options were exposed. No registration was attempted or completed. Existing Chrome passkey authentication success does not prove permission to enroll a synchronized software authenticator. Do not spoof managed-device status or claim Windows Hello hardware custody for Passless to work around this gate. An HP-supported alternate enrollment policy or explicit approval/support for the intended authenticator is needed before agent authentication acceptance can be tested for a new Passless credential.
+This rejection applies to this specific HP DaVinci entry point. The user clarified that the intended route is PingID device management. It does not establish that all PingID enrollment routes require a managed Windows PC. Registration policy and Passless acceptance remain unverified. Do not spoof managed-device status or hardware attestation.
 
 History was inspected from a temporary copy because Chrome locked the live SQLite file; the original profile was not modified. Temporary history copies were removed automatically. This discovery supersedes the request for the user to locate the enrollment page.
+
+
+## Correct PingID device management route
+
+History also contained `https://authenticator.pingone.com/pingid/ppm/devices`. Opening it reached `https://authenticator.pingone.com/registration/devicespage`. The live page lists the existing Windows Hello, biometrics, email and mobile authentication methods and offers **+ Add**. Existing methods and their priority were preserved.
+
+Selecting **+ Add** displayed **Authentication Required**: “This action requires you to authenticate with PingID.” Selecting Continue reached `/pingid/ppm/auth`, which displayed **Authenticated**. Enrollment choices and credential creation requirements still need inspection after the redirect completes. The earlier managed-Windows conclusion was too broad and is corrected above.
+
+
+### Registration choices and requirements
+
+After successful step-up, Add a New Device offered PingID Mobile Application, Yubikey, Biometrics and Email. Selecting Biometrics entered Biometrics Pairing. A metadata-only wrapper around `navigator.credentials.create` forwarded the original request unchanged and captured these requirements on Retry:
+
+- RP: `pingone.com`, name `PingID Web Authentication`.
+- Authenticator attachment: `platform`.
+- User verification: `required`.
+- Resident key: `preferred`; `requireResidentKey=false`.
+- Attestation: `none`.
+- Algorithms as supplied: `-7`, `-37`, `-257`.
+- Timeout: 120000 ms. Two excluded credentials; no extensions.
+
+The browser rejected the attempt with `NotAllowedError`: “The operation is not allowed at this time because the page does not have focus.” This is a browser focus failure, not evidence of server rejection or authenticator compatibility. No credential was created in this attempt. The observer recorded no challenge, credential ID, user ID, private key or assertion. Goran still needs an agent-capable Passless candidate and a focused enrollment test; platform attachment and required user verification remain acceptance gates.
