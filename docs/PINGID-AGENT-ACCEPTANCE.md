@@ -149,3 +149,30 @@ Jonathan requested a comparison on Slazenger. Regular Chrome 149.0.7827.155, usi
 At 12:58:00 on 1 Nov 2026, the Passless journal recorded user verification accepted, followed by zero matching credentials for `pingone.com` and `DoesNotExist`. Jonathan reported “try a different security key”. This establishes that regular Chrome contacts native Passless on Slazenger. The observed failure is the absence of a matching credential in this request, not a failure to discover Passless. Server-accepted authentication remains unverified.
 
 The Goran enrollment observation must not be generalized to all HP sign-in or Slazenger enrollment. The next test is to authenticate using the existing Google credential and inspect Add a New Device on Slazenger. No Slazenger enrollment result is established yet.
+
+### Enrollment response audit and backup consistency, 1 Nov 2026
+
+Slazenger's authenticated My Devices session reached Add a New Device, then Biometrics Pairing. The observed registration request again required platform attachment, user verification required, resident key preferred and attestation none. Jonathan reported that Chrome offered Google Password Manager. No new Google credential was requested or confirmed.
+
+The served PingID bundle `https://authenticator.pingone.com/registration/scripts/react/build/bundle-devices-v22.304.js` serializes native registration buffers using standard base64, retains the credential's base64url ID, and includes attachment and transports. Passless supplies those fields. The page does not call `getPublicKey`, so Passless's null result there does not explain this path's HTTP 400. A behavioral regression now exercises this serialization boundary with bytes that distinguish base64 from base64url. All 70 extension behavioral tests passed.
+
+A concrete separate defect was found: agent registration omitted backup flags while persisting backup eligibility when `enable_credential_backup=true`; assertion signing then included that eligibility. Goran's test configuration enables backup. The fix derives registration flags and persisted state from the same value. The regression compares registration, persisted credential and assertion flags with backup enabled and disabled. The Nix agent package now explicitly runs registration tests as well as signing tests. Existing incomplete credentials remain untouched; this change affects new registrations.
+
+This mismatch can invalidate later authentication. It is not established as the cause of initial enrollment rejection. The outer authenticator-data layout and none-attestation map were correct, but deeper review of the pinned key provider found the malformed public key described below. No HP tenant policy restriction has been proven, and no hardware identity or attestation was substituted.
+
+References:
+- https://docs.pingidentity.com/pingid/pingid_service_management/pid_configuring_fido2_authentication_method.html (attachment and transport classification is documented for Windows/Mac OS login; this does not establish HP web enrollment policy).
+- https://developer.pingidentity.com/pingid-api/pid_c_PingIDapiExampleFIDObiometrics.html (registration response flow).
+- https://www.w3.org/TR/webauthn-3/#sctn-credential-backup (backup eligibility consistency).
+
+Independent registration verification now passes as recorded below. The next live acceptance gate is fresh HP enrollment followed by server-verified assertion. If a conforming response still receives the generic PingID 100200 error, correlate the recorded request IDs with HP/PingID server diagnostics. A successful source test is not HP acceptance or authorization for unattended renewal.
+
+### Root-cause candidate: raw key used as a COSE key
+
+The pinned `soft-fido2-ctap` 0.17.0 `SoftwareCredentialKeyProvider::generate` returns a raw public key in its `cose_public_key` field: a 65-byte uncompressed EC point for ES256 or 32 raw bytes for Ed25519. Its own tests explicitly check this raw representation. Agent registration appended the field directly as `credentialPublicKey`, which must be a COSE CBOR map. The old agent response was therefore malformed despite its valid outer attestation map.
+
+Agent registration now encodes ES256 as EC2/P-256 with x/y coordinates and EdDSA/Ed25519 as OKP/Ed25519 with x. Invalid lengths, point prefixes and unsupported algorithms fail before credential storage. A synthetic registration test decodes the resulting COSE maps for all supported algorithms and exports only public test responses. `tools/agent-uhid-feasibility/controlled-rp/verify-agent-registration.mjs` verifies those responses with the independently maintained SimpleWebAuthn server and reconstructs the old raw-key encoding as a negative control.
+
+This is a concrete enrollment defect and a strong explanation for HTTP 400. HP acceptance remains a live test requirement; it is not established by source inspection.
+
+Validation: all 70 extension behavioral tests, 118 agent signing tests and 29 agent registration tests passed. SimpleWebAuthn server 14.0.3 accepted actual synthetic registration responses for algorithms -7, -8 and -19. It rejected all three reconstructed original raw-key responses. These tests establish the registration-format repair; HP enrollment and unattended teams-cli renewal remain unverified.

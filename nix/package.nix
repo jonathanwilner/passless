@@ -18,6 +18,7 @@ rustPlatform.buildRustPackage {
   cargoTestFlags = [ "-p" "passless-core" "-p" "passless-config-doc" ];
   postBuild = lib.optionalString withAgent ''
     cargo test --offline --locked --release --features agent -p passless-rs agent::sign::
+    cargo test --offline --locked --release --features agent -p passless-rs agent::register::
   '' + ''
     # A private bus and synthetic daemon exercise consent deadlines without
     # accessing a desktop session, hardware, or credential store.

@@ -263,14 +263,23 @@ impl RegisterHandler {
             )
         })?;
 
+        // soft-fido2 0.17 names this field cose_public_key but supplies raw
+        // SEC1/Ed25519 bytes. WebAuthn attestedCredentialData requires a COSE map.
+        let cose_public_key = encode_cose_public_key(&generated.cose_public_key, algorithm)?;
         let credential_id = generate_credential_id();
 
+        let backup_state = if self.security_config.enable_credential_backup {
+            soft_fido2::CredentialBackupState::Eligible
+        } else {
+            soft_fido2::CredentialBackupState::NotEligible
+        };
         let authenticator_data = build_authenticator_data_for_registration(
             &normalized_rp,
             &credential_id,
-            &generated.cose_public_key,
+            &cose_public_key,
             up,
             uv,
+            backup_state.flags(),
         );
 
         let client_data_json = build_client_data_json_for_registration(
@@ -303,11 +312,7 @@ impl RegisterHandler {
             key: generated.key,
             created: now_ms,
             discoverable: true,
-            backup_state: if self.security_config.enable_credential_backup {
-                soft_fido2::CredentialBackupState::Eligible
-            } else {
-                soft_fido2::CredentialBackupState::NotEligible
-            },
+            backup_state,
             extensions: soft_fido2::Extensions::default(),
         };
 
@@ -362,19 +367,56 @@ fn generate_credential_id() -> Vec<u8> {
     id
 }
 
+fn encode_cose_public_key(raw: &[u8], algorithm: i32) -> Result<Vec<u8>, ProtocolError> {
+    use ciborium::Value::{Bytes, Integer, Map};
+    let int = |value: i32| Integer(value.into());
+    let entries = match algorithm {
+        -7 if raw.len() == 65 && raw[0] == 0x04 => vec![
+            (int(1), int(2)),
+            (int(3), int(algorithm)),
+            (int(-1), int(1)),
+            (int(-2), Bytes(raw[1..33].to_vec())),
+            (int(-3), Bytes(raw[33..65].to_vec())),
+        ],
+        -8 | -19 if raw.len() == 32 => vec![
+            (int(1), int(1)),
+            (int(3), int(algorithm)),
+            (int(-1), int(6)),
+            (int(-2), Bytes(raw.to_vec())),
+        ],
+        _ => {
+            return Err(ProtocolError::new(
+                ErrorCode::Internal,
+                "key provider returned an unsupported public-key encoding",
+                RecommendedAction::Abort,
+            ));
+        }
+    };
+    let mut encoded = Vec::new();
+    ciborium::into_writer(&Map(entries), &mut encoded).map_err(|_| {
+        ProtocolError::new(
+            ErrorCode::Internal,
+            "public-key CBOR encoding failed",
+            RecommendedAction::Abort,
+        )
+    })?;
+    Ok(encoded)
+}
+
 fn build_authenticator_data_for_registration(
     rp_id: &str,
     credential_id: &[u8],
     cose_public_key: &[u8],
     up: bool,
     uv: bool,
+    backup_flags: u8,
 ) -> Vec<u8> {
     let mut auth_data = Vec::with_capacity(37 + credential_id.len() + cose_public_key.len());
 
     let rp_id_hash = Sha256::digest(rp_id.as_bytes());
     auth_data.extend_from_slice(&rp_id_hash);
 
-    let mut flags = 0x40;
+    let mut flags = 0x40 | backup_flags;
     if up {
         flags |= 0x01;
     }
@@ -886,7 +928,7 @@ mod tests {
         let cose_key = vec![0xBB; 20];
 
         let auth_data =
-            build_authenticator_data_for_registration(rp_id, &cred_id, &cose_key, true, false);
+            build_authenticator_data_for_registration(rp_id, &cred_id, &cose_key, true, false, 0);
 
         assert_eq!(auth_data[32], 0x41);
         assert_eq!(&auth_data[33..37], &0u32.to_be_bytes());
@@ -901,7 +943,7 @@ mod tests {
     fn test_build_authenticator_data_rp_id_hash() {
         let rp_id = "example.com";
         let auth_data =
-            build_authenticator_data_for_registration(rp_id, &[0; 10], &[0; 10], true, false);
+            build_authenticator_data_for_registration(rp_id, &[0; 10], &[0; 10], true, false, 0);
 
         let mut hasher = Sha256::new();
         hasher.update(rp_id.as_bytes());
@@ -1130,6 +1172,83 @@ mod tests {
         assert!(auth_data.len() > 55);
         let cred_id_len = u16::from_be_bytes([auth_data[53], auth_data[54]]) as usize;
         assert!(auth_data.len() >= 55 + cred_id_len);
+    }
+
+    #[test]
+    fn test_registration_backup_flags_match_stored_credential_and_assertion() {
+        for backup_enabled in [false, true] {
+            let mut f = RegisterTestFixture::new();
+            f.security_config.enable_credential_backup = backup_enabled;
+            let handler = f.make_handler();
+            let resp = handler.register(&f.make_ctx(), &f.make_req()).unwrap();
+            let credential_id = b64u_decode(&resp.credential_id_b64u).unwrap();
+            let credential = f.storage.lock().unwrap().read(&credential_id).unwrap();
+            let registration = b64u_decode(&resp.authenticator_data_b64u).unwrap();
+            let expected = if backup_enabled { 0x08 } else { 0 };
+            assert_eq!(credential.backup_state.flags(), expected);
+            assert_eq!(registration[32] & 0x18, expected);
+            let assertion = super::super::sign::build_authenticator_data(
+                &credential.rp.id,
+                true,
+                true,
+                credential.backup_state.flags(),
+                1,
+            );
+            assert_eq!(registration[32] & 0x18, assertion[32] & 0x18);
+        }
+    }
+
+    #[test]
+    fn test_registration_public_key_is_cose_and_exports_synthetic_fixture() {
+        for algorithm in [-7, -8, -19] {
+            let f = RegisterTestFixture::new();
+            let mut req = f.make_req();
+            req.pub_key_cred_params = vec![algorithm];
+            let response = f.make_handler().register(&f.make_ctx(), &req).unwrap();
+            let auth_data = b64u_decode(&response.authenticator_data_b64u).unwrap();
+            let id_len = u16::from_be_bytes([auth_data[53], auth_data[54]]) as usize;
+            let cose_bytes = &auth_data[55 + id_len..];
+            let mut cursor = std::io::Cursor::new(cose_bytes);
+            let value: ciborium::Value = ciborium::from_reader(&mut cursor).unwrap();
+            assert_eq!(cursor.position() as usize, cose_bytes.len());
+            let ciborium::Value::Map(fields) = value else {
+                panic!("expected COSE map")
+            };
+            let get = |label: i32| {
+                fields
+                    .iter()
+                    .find(|(key, _)| *key == ciborium::Value::Integer(label.into()))
+                    .map(|(_, value)| value)
+                    .unwrap()
+            };
+            assert_eq!(get(3), &ciborium::Value::Integer(algorithm.into()));
+            assert_eq!(
+                get(1),
+                &ciborium::Value::Integer((if algorithm == -7 { 2 } else { 1 }).into())
+            );
+            assert_eq!(
+                get(-1),
+                &ciborium::Value::Integer((if algorithm == -7 { 1 } else { 6 }).into())
+            );
+            assert!(matches!(get(-2), ciborium::Value::Bytes(x) if x.len() == 32));
+            if algorithm == -7 {
+                assert!(matches!(get(-3), ciborium::Value::Bytes(y) if y.len() == 32));
+            }
+            // Public output only, from this synthetic in-memory test credential.
+            // Visible only with --nocapture, for an independent WebAuthn verifier.
+            println!(
+                "PASSLESS_PUBLIC_REGISTRATION_FIXTURE={}",
+                serde_json::to_string(&response).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn test_cose_encoding_rejects_invalid_provider_output() {
+        assert!(encode_cose_public_key(&[0; 65], -7).is_err());
+        assert!(encode_cose_public_key(&[4; 64], -7).is_err());
+        assert!(encode_cose_public_key(&[0; 31], -8).is_err());
+        assert!(encode_cose_public_key(&[0; 32], -257).is_err());
     }
 
     #[test]

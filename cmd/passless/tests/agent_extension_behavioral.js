@@ -1968,6 +1968,34 @@ test("worker registration accepts the daemon's flat credential response", functi
   assert.strictEqual(JSON.stringify(responses[0].response), JSON.stringify(credential));
 });
 
+test("registration bytes survive PingID browser response serialization", async function() {
+  const s = runMainTest("pingid-wire");
+  const pending = s.navigator.credentials.create(registrationOptions("-7"));
+  const id = s._postMessageCalls[0].data.id;
+  const bytes = Buffer.from([0, 127, 128, 254, 255]);
+  const response = {credential_id_b64u:b64url(bytes), public_key_algorithm:-7,
+    authenticator_data_b64u:b64url(bytes), attestation_object_b64u:b64url(bytes),
+    client_data_json_b64u:b64url(Buffer.from('{"type":"webauthn.create"}'))};
+  simulateMessage(s._windowListeners.message, {source:"passless-agent-broker", channel:"pingid-wire", id,
+    ok:true, type:"create", response}, s.window);
+  const credential = await pending;
+  // PingID bundle-devices-v22.304.js uses standard base64 for raw buffers,
+  // while retaining the credential's base64url id. Exercise that boundary.
+  const encode = value => Buffer.from(new Uint8Array(value)).toString("base64");
+  const wire = JSON.parse(JSON.stringify({id:credential.id, rawId:encode(credential.rawId),
+    type:credential.type, authenticatorAttachment:credential.authenticatorAttachment,
+    clientExtensionResults:credential.getClientExtensionResults(), response:{
+      clientDataJSON:encode(credential.response.clientDataJSON),
+      attestationObject:encode(credential.response.attestationObject),
+      transports:credential.response.getTransports()}}));
+  assert.deepStrictEqual(Buffer.from(wire.rawId,"base64"), bytes);
+  assert.deepStrictEqual(Buffer.from(wire.id,"base64url"), bytes);
+  assert.deepStrictEqual(Buffer.from(wire.response.attestationObject,"base64"), bytes);
+  assert.strictEqual(Buffer.from(wire.response.clientDataJSON,"base64").toString(), '{"type":"webauthn.create"}');
+  assert.strictEqual(wire.authenticatorAttachment,"platform");
+  assert.deepStrictEqual(wire.response.transports,["internal"]);
+});
+
 // ======================== REPORT ========================
 
 (async function() {
