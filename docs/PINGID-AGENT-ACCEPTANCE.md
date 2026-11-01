@@ -32,3 +32,15 @@ The user was asked to complete the existing passkey ceremony in the dedicated te
 The user confirmed successful sign-in using the existing passkey. The dedicated tab subsequently reached Microsoft's `/common/wrongplace` page. This diagnostic request intentionally had no code-exchange consumer, so that landing page is not itself a failed PingID ceremony. No raw assertion or server logs were collected; user confirmation plus callback navigation is the acceptance evidence for the existing credential, not for Passless.
 
 A second authorization request reused the newly established federation session and returned without a fresh passkey prompt. The earlier HP enrollment-link page could not be restored from browser history because it required form resubmission. The user was asked to open the authenticated HP passkey enrollment/device-management page. Registration policy and agent credential acceptance remain unknown. No new credential was registered.
+
+## Enrollment policy discovered in browser history
+
+Goran's Chrome history identified the stable entry point **https://www.hp.com/passkey-enrollment**. Opening it in the dedicated live Chrome tab redirected to HP's PingOne DaVinci enrollment policy. The rendered DOM reported:
+
+> DEVICE NOT SUPPORTED
+> HP-Managed PC Required
+> HP Passkey enrollment requires a HP-Managed PC with Windows Hello configured. Please switch to your HP-managed device and try again.
+
+This is a concrete enrollment gate on Goran, before any credential-creation options were exposed. No registration was attempted or completed. Existing Chrome passkey authentication success does not prove permission to enroll a synchronized software authenticator. Do not spoof managed-device status or claim Windows Hello hardware custody for Passless to work around this gate. An HP-supported alternate enrollment policy or explicit approval/support for the intended authenticator is needed before agent authentication acceptance can be tested for a new Passless credential.
+
+History was inspected from a temporary copy because Chrome locked the live SQLite file; the original profile was not modified. Temporary history copies were removed automatically. This discovery supersedes the request for the user to locate the enrollment page.
