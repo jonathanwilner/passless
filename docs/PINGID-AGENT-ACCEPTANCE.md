@@ -108,3 +108,26 @@ Validation:
 - In the live managed Chromium, the installed availability shim returned **true** at `https://authenticator.pingone.com` and **false** at `https://example.com`, which is outside the profile's RP policy.
 
 The candidate was temporarily activated using the runtime override documented above. The earlier normal-Chrome enrollment tab had been closed. Direct entry to PingID device management returned an invalid-session error. A fresh HP federation request completed using existing authentication state, but did not create a new PingID device-management session. The user was asked to reopen the authenticated Add a New Device screen. Enrollment and server-accepted Passless authentication remain pending; no registration grant or new PingID credential was created by these checks.
+
+## Registration response fix, 1 Nov 2026
+
+The next live enrollment exposed a second integration defect. Passless created and encrypted a PingID credential in the existing Git-synchronized store, but the extension expected a `create_attestation_result` envelope. The daemon returns a flat `RegisterCredentialResponse`. The extension therefore rejected the valid response before PingID could complete enrollment. The browser reported `NotAllowedError`; this was not a server rejection of the generated attestation.
+
+Commit `5a3ed40` accepts the daemon's flat registration response and preserves the existing wrapped assertion response. All 69 browser behavioral tests passed, including a regression using the actual registration wire shape. The ARM64 package rebuild is tracked as `build-passless-registration-response`.
+
+The first generated PingID credential remains encrypted in the store as an unconfirmed enrollment. Existing PingID methods and priorities remain unchanged. Do not count this local credential as server enrollment or successful authentication. The next gate is fresh enrollment with the corrected packaged extension, followed by server-verified authentication and credential-specific policy.
+
+### Packaged live result
+
+The ARM64 build completed with exit code 0. Output: `/nix/store/wrgak11nxajif14fddkrm034qw0d2vyj-passless-0.20.2`. The packaged extension returned platform availability true, exposed Biometrics, created an encrypted credential, and submitted the enrollment to PingID. A second bounded attempt captured the same server failure:
+
+- Pairing options: HTTP 200, `/registration/pingid/devices/webauthnPairing`.
+- Enrollment: HTTP 400, `/registration/pingid/devices/enrollment`.
+- PingID error code: `100200`, description key `error.pingid.api`.
+- Message: “An error occurred. Try again. Check with an administrator if the error persists.”
+- Developer message and more-info URL were empty.
+- Request ID: `devices_CaDp5dXA48jJ3hwZIlZIfpnrHjoH099F`.
+
+This establishes that the response bridge is repaired. It does not establish that HP permits this authenticator or that the attestation is accepted. HP/PingID server logs correlated to the request ID are the next decisive evidence. Do not infer a tenant restriction solely from this generic error, and do not impersonate an approved hardware authenticator to work around it.
+
+Three encrypted PingID credentials from incomplete enrollment remain preserved in the synchronized store. None is confirmed enrolled. No server-verified Passless sign-in or teams-cli renewal was achieved. After the bounded test, the runtime service override was removed, the original Home Manager Passless service was restored and confirmed active, and the temporary AppArmor profile was unloaded. Existing HP methods and priorities were preserved.
