@@ -16,7 +16,9 @@ rustPlatform.buildRustPackage {
   buildFeatures = lib.optional withAgent "agent";
   # Unit tests only. Hardware and user-interaction tests require a separate live session.
   cargoTestFlags = [ "-p" "passless-core" "-p" "passless-config-doc" ];
-  postBuild = ''
+  postBuild = lib.optionalString withAgent ''
+    cargo test --offline --locked --release --features agent -p passless-rs agent::sign::
+  '' + ''
     # A private bus and synthetic daemon exercise consent deadlines without
     # accessing a desktop session, hardware, or credential store.
     ${dbus}/bin/dbus-run-session --dbus-daemon=${dbus}/bin/dbus-daemon --config-file=${dbus}/share/dbus-1/session.conf -- cargo test --offline --locked --release \

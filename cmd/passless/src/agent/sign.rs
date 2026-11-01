@@ -328,7 +328,9 @@ struct RequestBudget {
 
 impl RequestBudget {
     fn available(&self) -> bool {
-        self.inner.lock().is_ok_and(|inner| inner.used.len() < self.max_requests)
+        self.inner
+            .lock()
+            .is_ok_and(|inner| inner.used.len() < self.max_requests)
     }
 
     fn claim(&self, body: &[u8]) -> RequestClaim {
@@ -1265,20 +1267,33 @@ impl SignHandler {
         if request.cross_origin || !self.audit_gate.ping() {
             return false;
         }
-        let Some(origin) = parse_origin(&request.origin) else { return false; };
-        let Some(grant) = self.policy_runtime.resolve_grant_for_sign(&ctx.profile_id, &ctx.active_grant_id) else { return false; };
+        let Some(origin) = parse_origin(&request.origin) else {
+            return false;
+        };
+        let Some(grant) = self
+            .policy_runtime
+            .resolve_grant_for_sign(&ctx.profile_id, &ctx.active_grant_id)
+        else {
+            return false;
+        };
         if grant.is_revoked || grant.state != super::grant::GrantState::Active {
             return false;
         }
         grant.rp_ids.iter().any(|rp| {
-            let rp = if rp == ANY_RP_ID { origin.host.clone() } else { normalize_rp_id(rp) };
+            let rp = if rp == ANY_RP_ID {
+                origin.host.clone()
+            } else {
+                normalize_rp_id(rp)
+            };
             if !verify_origin_context(&request.origin, Some(&request.top_origin), false, &rp) {
                 return false;
             }
             ctx.profile_config.rule_for_rp(&rp).is_some_and(|rule| {
                 rule.authenticate.authorization == passless_core::agent::AgentAuthorization::Allow
-                    && rule.authenticate.user_presence == passless_core::agent::UserPresenceSource::Agent
-                    && rule.authenticate.user_verification == passless_core::agent::UserVerificationSource::Agent
+                    && rule.authenticate.user_presence
+                        == passless_core::agent::UserPresenceSource::Agent
+                    && rule.authenticate.user_verification
+                        == passless_core::agent::UserVerificationSource::Agent
             })
         })
     }
@@ -4291,10 +4306,12 @@ mod tests {
                 cross_origin: false,
             };
             assert!(handler.platform_available(&ctx, &request));
-            ctx.profile_config.rules[0].authenticate.user_verification = passless_core::agent::UserVerificationSource::Human;
+            ctx.profile_config.rules[0].authenticate.user_verification =
+                passless_core::agent::UserVerificationSource::Human;
             assert!(!handler.platform_available(&ctx, &request));
             ctx = f.make_ctx();
-            ctx.profile_config.rules[0].authenticate.authorization = passless_core::agent::AgentAuthorization::Deny;
+            ctx.profile_config.rules[0].authenticate.authorization =
+                passless_core::agent::AgentAuthorization::Deny;
             assert!(!handler.platform_available(&ctx, &request));
             ctx = f.make_ctx();
             request.cross_origin = true;
@@ -4305,18 +4322,39 @@ mod tests {
         fn http_capabilities_checks_origin_expiry_and_bearer_without_spending_budget() {
             let (shutdown, _dir, sock_path, registry, token, f, handle) = setup_bound(true);
             let probe = |origin: &str, token: &str| {
-                let body = serde_json::json!({"origin":origin,"top_origin":origin,"cross_origin":false}).to_string();
-                let req = format_sign_request(token, body.as_bytes()).replace("POST /sign ", "POST /capabilities ");
+                let body =
+                    serde_json::json!({"origin":origin,"top_origin":origin,"cross_origin":false})
+                        .to_string();
+                let req = format_sign_request(token, body.as_bytes())
+                    .replace("POST /sign ", "POST /capabilities ");
                 http_request(&sock_path, &req, body.as_bytes())
             };
             for _ in 0..70 {
-                assert!(probe("https://login.example.com", &token).contains("user_verifying_platform_authenticator\":true"));
+                assert!(
+                    probe("https://login.example.com", &token)
+                        .contains("user_verifying_platform_authenticator\":true")
+                );
             }
-            assert!(probe("https://evil.com", &token).contains("user_verifying_platform_authenticator\":false"));
-            let body = sign_request_body("https://example.com", "example.com", "dGVzdA", vec![], false);
-            assert!(http_request(&sock_path, &format_sign_request(&token, &body), &body).contains("200 OK"));
+            assert!(
+                probe("https://evil.com", &token)
+                    .contains("user_verifying_platform_authenticator\":false")
+            );
+            let body = sign_request_body(
+                "https://example.com",
+                "example.com",
+                "dGVzdA",
+                vec![],
+                false,
+            );
+            assert!(
+                http_request(&sock_path, &format_sign_request(&token, &body), &body)
+                    .contains("200 OK")
+            );
             f.clock.advance(Duration::from_secs(301));
-            assert!(probe("https://example.com", &token).contains("user_verifying_platform_authenticator\":false"));
+            assert!(
+                probe("https://example.com", &token)
+                    .contains("user_verifying_platform_authenticator\":false")
+            );
             registry.revoke(&token);
             assert!(probe("https://example.com", &token).contains("401 Unauthorized"));
             shutdown.store(true, Ordering::Release);
