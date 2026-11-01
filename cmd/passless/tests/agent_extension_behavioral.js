@@ -83,6 +83,7 @@ function runMainTest(channel, setupFn) {
   };
 
   const credentials = {
+    create: function(options) { return Promise.resolve({ id: "native-created" }); },
     get: function(options) {
       sandbox._originalCalled = true;
       sandbox._originalOptions = options;
@@ -149,6 +150,32 @@ function runMainTest(channel, setupFn) {
 
   return sandbox;
 }
+
+function registrationOptions(alg) {
+  return { publicKey: {
+    rp: { id: "example.com", name: "Example" },
+    user: { id: new Uint8Array([1]), name: "test" },
+    challenge: makeChallenge(),
+    pubKeyCredParams: [{ type: "public-key", alg: alg }],
+    authenticatorSelection: { userVerification: "required" }
+  }};
+}
+
+test("registration accepts PingID decimal-string COSE algorithm", function() {
+  const s = runMainTest("pingid-alg");
+  s.navigator.credentials.create(registrationOptions("-7"));
+  assert.strictEqual(s._postMessageCalls.length, 1);
+  assert.deepStrictEqual(Array.from(s._postMessageCalls[0].data.request.pub_key_cred_params), [-7]);
+  assert.strictEqual(s._postMessageCalls[0].data.request.user_verification, true);
+});
+
+test("registration rejects malformed or out-of-range COSE algorithms", async function() {
+  for (const alg of ["-7junk", "", "1.5", "2147483648", {}, 1.5]) {
+    const s = runMainTest("invalid-alg");
+    await assert.rejects(s.navigator.credentials.create(registrationOptions(alg)));
+    assert.strictEqual(s._postMessageCalls.length, 0);
+  }
+});
 
 function runBrokerCode(sandbox, channel) {
   const ctx = vm.createContext(sandbox);

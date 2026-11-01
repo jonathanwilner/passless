@@ -139,10 +139,14 @@
     var algorithms = [];
     for (var p = 0; p < publicKey.pubKeyCredParams.length; p++) {
       var param = publicKey.pubKeyCredParams[p];
-      if (!param || param.type !== "public-key" || !Number.isInteger(param.alg)) {
+      // PingID supplies COSE identifiers as decimal strings. Accept that
+      // browser-compatible representation without admitting malformed values.
+      var alg = param && param.alg;
+      if (typeof alg === "string" && /^-?\d+$/.test(alg)) alg = Number(alg);
+      if (!param || param.type !== "public-key" || !Number.isInteger(alg) || alg < -2147483648 || alg > 2147483647) {
         throw new TypeError("malformed pubKeyCredParams entry");
       }
-      algorithms.push(param.alg);
+      algorithms.push(alg);
     }
 
     var excludeCredentials = [];
